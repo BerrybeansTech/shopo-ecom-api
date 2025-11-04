@@ -1,59 +1,100 @@
-const { DataTypes } = require('sequelize');
-const sequelize = require('../config/db'); 
 
-module.exports = sequelize.define('Customers', {
+
+const { DataTypes } = require('sequelize');
+const sequelize = require('../config/db');
+
+const Customers = sequelize.define('Customers', {
   id: {
-  type: DataTypes.UUID,
-  defaultValue: DataTypes.UUIDV4,
-    primaryKey: true
+    type: DataTypes.UUID,
+    defaultValue: DataTypes.UUIDV4,
+    primaryKey: true,
   },
-  userName: {
-    type: DataTypes.STRING,
-    allowNull: false,
-  },
+
   name: {
     type: DataTypes.STRING,
     allowNull: false,
   },
+
   email: {
     type: DataTypes.STRING,
     allowNull: false,
+    unique: true, 
+    validate: {
+      isEmail: true,
+    },
   },
+
   phone: {
     type: DataTypes.STRING,
     allowNull: false,
+    unique: true,
   },
+
+  googleAuthToken: {
+    type: DataTypes.TEXT,
+    allowNull: true, 
+  },
+
   password: {
     type: DataTypes.TEXT,
-    allowNull: false,
+    allowNull: true, 
   },
+
   address: {
     type: DataTypes.TEXT,
+    allowNull: true,
   },
+
   city: {
-    type: DataTypes.TEXT,
+    type: DataTypes.STRING,
+    allowNull: true,
   },
+
   state: {
-    type: DataTypes.TEXT,
+    type: DataTypes.STRING,
+    allowNull: true,
   },
+
   country: {
-    type: DataTypes.TEXT,
+    type: DataTypes.STRING,
+    allowNull: true,
   },
+
   postalCode: {
     type: DataTypes.STRING,
+    allowNull: true,
   },
+
   remarks: {
     type: DataTypes.TEXT,
-    allowNull: true
+    allowNull: true,
   },
+
   status: {
-    type: DataTypes.ENUM('active', 'inactive'),
-    defaultValue: "active",
+    type: DataTypes.ENUM('active', 'inactive', 'blocked'),
+    defaultValue: 'active',
   },
+
+  // loyaltyPoints: {
+  //   type: DataTypes.INTEGER,
+  //   defaultValue: 0,
+  //   allowNull: true,
+  // },
+
+  // giftCardCode: {
+  //   type: DataTypes.STRING,
+  //   allowNull: true,
+  // },
+
+  // giftCardBalance: {
+  //   type: DataTypes.DECIMAL(10, 2),
+  //   allowNull: true,
+  //   defaultValue: 0.00,
+  // },
 
 }, {
   tableName: 'Customers',
   timestamps: true,
 });
 
-
+module.exports = Customers;

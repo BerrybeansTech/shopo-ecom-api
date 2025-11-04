@@ -1,20 +1,22 @@
 const Customers = require("../models/customers.model");
 const bcrypt = require("bcryptjs");
-const path = require("path");
-const fs = require("fs");
-const { Op, literal } = require("sequelize");
-const { validateOtpToken } = require("../services/otp.service")
+const { Op } = require("sequelize");
+const sequelize = require("../config/db");
+const redisClient = require("../config/redis.config");
+const { validateOtpToken } = require("../services/otp.service");
 const {
   generateAccessToken,
   generateRefreshToken,
 } = require("../services/jwt.service");
+// const { OAuth2Client } = require("google-auth-library");
+// const client = new OAuth2Client(process.env.GOOGLE_CLIENT_ID);
+
 
 const getAllCustomers = async (req, res) => {
   try {
-    const { name, state, type, status, email, allCustomers } = req.query;
+    const { name, state, status, email, allCustomers } = req.query;
 
     const whereClause = {};
-    const andConditions = [];
 
     if (allCustomers) {
       const result = await Customers.findAndCountAll({
@@ -22,25 +24,11 @@ const getAllCustomers = async (req, res) => {
       });
       return res.json(result);
     }
-    if (name) {
-      whereClause.name = {
-        [Op.like]: `%${name}%`,
-      };
-    }
 
-    if (email) {
-      whereClause.email = {
-        [Op.like]: `%${email}%`,
-      };
-    }
-
+    if (name) whereClause.name = { [Op.like]: `%${name}%` };
+    if (email) whereClause.email = { [Op.like]: `%${email}%` };
     if (status) whereClause.status = status;
-    if (type) whereClause.type = type;
     if (state) whereClause.state = state;
-
-    if (andConditions.length > 0) {
-      whereClause[Op.and] = andConditions;
-    }
 
     const page = parseInt(req.query.page) || 1;
     const limit = parseInt(req.query.limit) || 10;
@@ -72,53 +60,54 @@ const getAllCustomers = async (req, res) => {
   }
 };
 
+
 const getCustomersById = async (req, res) => {
   const { id } = req.params;
 
   try {
-    const t = await Customers.findOne({ where: { id } });
+    const customer = await Customers.findOne({ where: { id } });
 
-    if (!t) {
+    if (!customer) {
       return res
         .status(404)
-        .json({ success: false, message: "Customers not found" });
+        .json({ success: false, message: "Customer not found" });
     }
 
-    res.json({ success: true, data: { ...t.toJSON() } });
+    res.json({ success: true, data: customer });
   } catch (error) {
-    console.log("error", error);
+    console.error("Error fetching customer by ID:", error);
     res.status(500).json({
       success: false,
-      message: "Failed to retrieve Customers by id",
+      message: "Failed to retrieve customer by ID",
     });
   }
 };
 
-const createCustomers = async (req, res) => {
-  const {
-    otpToken,
-    userName,
-    name,
-    email,
-    phone,
-    password,
-    address,
-    city,
-    state,
-    country,
-    postalCode,
-  } = req.body;
 
+const createCustomers = async (req, res) => {
   try {
+    const {
+      otpToken,
+      name,
+      email,
+      phone,
+      password,
+      address,
+      city,
+      state,
+      country,
+      postalCode,
+    } = req.body;
+
     if (!password || password.trim() === "") {
       return res
-        .status(401)
-        .json({ success: false, message: "Missing password" });
+        .status(400)
+        .json({ success: false, message: "Password is required" });
     }
 
     const validation = await validateOtpToken({
       type: "customer-registration",
-      identifier: email,
+      identifier: phone,
       token: otpToken,
     });
 
@@ -126,22 +115,41 @@ const createCustomers = async (req, res) => {
       return res.status(403).json(validation);
     }
 
+
+    const resetKey = `reset:customer-registration:${email}`;
+    await redisClient.del(resetKey);
+
+  
     const hashedPassword = await bcrypt.hash(password, 10);
 
-    const newCustomer = await Customers.create({
-      userName,
-      name,
-      email,
-      phone,
-      password: hashedPassword,
-      address,
-      city,
-      state,
-      country,
-      postalCode,
+   
+    const newCustomer = await sequelize.transaction(async (transaction) => {
+    
+      const existingUser = await Customers.findOne({ where: { email }, transaction });
+      if (existingUser) {
+        throw new Error("Email already registered");
+      }
+
+ 
+      const existingPhone = await Customers.findOne({ where: { phone }, transaction });
+      if (existingPhone) {
+        throw new Error("Phone number already registered");
+      }
+
+  
+      return await Customers.create({
+        name,
+        email,
+        phone,
+        password: hashedPassword,
+        address,
+        city,
+        state,
+        country,
+        postalCode,
+      }, { transaction });
     });
 
-    // Tokens
     const payload = {
       id: newCustomer.id,
       name: newCustomer.name,
@@ -156,94 +164,86 @@ const createCustomers = async (req, res) => {
       httpOnly: true,
       secure: false,
       sameSite: "Strict",
-      maxAge: process.env.COOKIE_MAX_AGE,
+      maxAge: parseInt(process.env.COOKIE_MAX_AGE || 7 * 24 * 60 * 60 * 1000),
     });
 
     res.json({
       success: true,
-      message: "Customer created successfully",
-      data: {
-        customer: newCustomer,
-        accessToken,
-      },
+      message: "Customer registered successfully",
+      data: { customer: newCustomer, accessToken },
     });
   } catch (error) {
     console.error("Error creating customer:", error);
-    res
-      .status(500)
-      .json({ success: false, message: "Failed to create customer" });
+    console.error("Error name:", error.name);
+    console.error("Error message:", error.message);
+
+
+    if (error.message === "Email already registered" || error.message === "Phone number already registered") {
+      return res.status(400).json({
+        success: false,
+        message: error.message
+      });
+    }
+
+    if (error.name === 'SequelizeUniqueConstraintError') {
+      const field = error.errors[0]?.path;
+      return res.status(400).json({
+        success: false,
+        message: `This ${field} is already registered`
+      });
+    }
+
+    res.status(500).json({
+      success: false,
+      message: "Failed to create customer",
+      error: error.message
+    });
   }
 };
 
 const customerLogin = async (req, res) => {
-  const { email, password, credential: googleToken } = req.body;
+  const { email, password } = req.body;
 
   try {
-    let user;
-
-    if (googleToken) {
-      const ticket = await client.verifyIdToken({
-        idToken: googleToken,
-        audience: process.env.GOOGLE_CLIENT_ID,
-      });
-
-      const payload = ticket.getPayload();
-      const { email, name, sub: googleId } = payload;
-
-      user = await Customers.findOne({ where: { email } });
-
-      if (!user) {
-        return res.status(404).json({ message: "User not found" });
-        // user = await Customers.create({
-        //   email,
-        //   full_name: name,
-        //   google_id: googleId,
-        //   type: 'google',
-        // });
-      }
-    } else if (email && password) {
-      user = await Customers.findOne({ where: { email: email } });
-
-      if (!user) return res.status(404).json({ message: "User not found" });
-
-      const isMatch = await bcrypt.compare(password, user.password);
-      if (!isMatch)
-        return res.status(401).json({ message: "Invalid password" });
-    } else {
+    if (!email || !password)
       return res.status(400).json({ message: "Missing credentials" });
-    }
+
+    const user = await Customers.findOne({ where: { email } });
+    if (!user) return res.status(404).json({ message: "User not found" });
+
+    const isMatch = await bcrypt.compare(password, user.password);
+    if (!isMatch)
+      return res.status(401).json({ message: "Invalid email or password" });
+
     const payload = {
-      id: user?.id,
-      name: user?.name,
-      email: user?.email,
-      phone: user?.phone,
+      id: user.id,
+      name: user.name,
+      email: user.email,
+      phone: user.phone,
     };
 
     const accessToken = generateAccessToken(payload);
     const refreshToken = generateRefreshToken(payload);
 
-    // const isMobile = req.headers["platform"] === "mobile";
-    // if (!isMobile) {
     res.cookie("refreshToken", refreshToken, {
       httpOnly: true,
       secure: false,
       sameSite: "Strict",
-      maxAge: process.env.COOKIE_MAX_AGE,
+      maxAge: parseInt(process.env.COOKIE_MAX_AGE || 7 * 24 * 60 * 60 * 1000),
     });
-    // }
-    return res.json({
+
+    res.json({
       success: true,
       message: "Login successful",
       accessToken,
-      user
+      user,
     });
   } catch (err) {
     console.error("Login error:", err);
-    return res
-      .status(500)
-      .json({ success: false, message: "Internal server error" });
+    res.status(500).json({ success: false, message: "Internal server error" });
   }
 };
+
 
 const resetPassword = async (req, res) => {
   try {
@@ -251,14 +251,13 @@ const resetPassword = async (req, res) => {
 
     const user = await Customers.findOne({ where: { email } });
     if (!user) {
-      return res.status(404).json({
-        success: false,
-        message: 'User not found with this email',
-      });
+      return res
+        .status(404)
+        .json({ success: false, message: "User not found with this email" });
     }
 
     const validation = await validateOtpToken({
-      type: 'reset-password',
+      type: "reset-password",
       identifier: email,
       token: otpToken,
     });
@@ -268,90 +267,81 @@ const resetPassword = async (req, res) => {
     }
 
     const hashedPassword = await bcrypt.hash(newPassword, 10);
-
     await Customers.update({ password: hashedPassword }, { where: { email } });
 
-    return res.json({
+    res.json({
       success: true,
-      message: 'Password reset successfully',
+      message: "Password reset successfully",
     });
   } catch (error) {
-    console.error('Error in resetPassword:', error);
-    return res.status(500).json({
+    console.error("Error in resetPassword:", error);
+    res.status(500).json({
       success: false,
-      message: 'Internal server error',
+      message: "Internal server error",
     });
   }
 };
 
+
 const updateCustomers = async (req, res) => {
-  let {
-    id,
-    name,
-    email,
-    phone,
-    address,
-    city,
-    state,
-    country,
-    status,
-    postalCode,
-  } = req.body;
-
   try {
-    const existing = await Customers.findByPk(id);
+    const {
+      id,
+      name,
+      email,
+      phone,
+      address,
+      city,
+      state,
+      country,
+      status,
+      postalCode,
+    } = req.body;
 
+    const existing = await Customers.findByPk(id);
     if (!existing) {
-      return res.status(404).json({ message: "Customer not found" });
+      return res.status(404).json({ success: false, message: "Customer not found" });
     }
 
     await Customers.update(
-      {
-        name,
-        email,
-        phone,
-        address,
-        city,
-        state,
-        country,
-        status,
-        postalCode
-      },
+      { name, email, phone, address, city, state, country, status, postalCode },
       { where: { id } }
     );
 
     res.json({ success: true, message: "Customer updated successfully" });
   } catch (error) {
     console.error("Error updating customer:", error);
-    res
-      .status(500)
-      .json({ success: false, message: "Failed to update customer" });
+    res.status(500).json({
+      success: false,
+      message: "Failed to update customer",
+    });
   }
 };
+
 
 const deleteCustomers = async (req, res) => {
   const { id } = req.params;
 
   try {
-    const CustomersData = await Customers.findOne({ where: { id } });
+    const customer = await Customers.findOne({ where: { id } });
 
-    if (!CustomersData) {
+    if (!customer) {
       return res
         .status(404)
-        .json({ success: false, message: "Customers not found" });
+        .json({ success: false, message: "Customer not found" });
     }
 
     await Customers.destroy({ where: { id } });
 
     res.json({
       success: true,
-      message: "Customers deleted successfully",
+      message: "Customer deleted successfully",
     });
   } catch (error) {
-    console.error("Error deleting Customers:", error);
+    console.error("Error deleting customer:", error);
     res.status(500).json({
       success: false,
-      message: "Failed to delete Customers",
+      message: "Failed to delete customer",
     });
   }
 };
