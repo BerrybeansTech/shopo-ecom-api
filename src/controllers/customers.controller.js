@@ -202,18 +202,23 @@ const createCustomers = async (req, res) => {
 };
 
 const customerLogin = async (req, res) => {
-  const { email, password } = req.body;
+  const { email, phone, password } = req.body;
 
   try {
-    if (!email || !password)
+    if ((!email && !phone) || !password) {
       return res.status(400).json({ message: "Missing credentials" });
+    }
 
-    const user = await Customers.findOne({ where: { email } });
+    // Find by email or phone
+    const user = await Customers.findOne({
+      where: email ? { email } : { phone },
+    });
+
     if (!user) return res.status(404).json({ message: "User not found" });
 
     const isMatch = await bcrypt.compare(password, user.password);
     if (!isMatch)
-      return res.status(401).json({ message: "Invalid email or password" });
+      return res.status(401).json({ message: "Invalid email/phone or password" });
 
     const payload = {
       id: user.id,
@@ -243,6 +248,7 @@ const customerLogin = async (req, res) => {
     res.status(500).json({ success: false, message: "Internal server error" });
   }
 };
+
 
 
 const resetPassword = async (req, res) => {
