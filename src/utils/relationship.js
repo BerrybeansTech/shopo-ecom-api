@@ -1,5 +1,7 @@
 const Customer = require("../models/customers.model");
-const ApiKeys = require("../models/apiKeys.model");
+const ProductCategory = require("../models/productCategory.model");
+const ProductSubCategory = require("../models/productSubCategory.model");
+const ProductChildCategory = require("../models/productChildCategory.model");
 // const Address = require('./address/model');
 
 Customer.hasOne(ApiKeys, {
@@ -12,6 +14,12 @@ ApiKeys.belongsTo(Customer, {
   onDelete: "CASCADE",
   onUpdate: "CASCADE",
 });
+
+ProductSubCategory.belongsTo(ProductCategory, { foreignKey: 'categoryId' });
+ProductCategory.hasMany(ProductSubCategory, { foreignKey: 'categoryId' });
+
+ProductChildCategory.belongsTo(ProductSubCategory, { foreignKey: 'subCategoryId' });
+ProductSubCategory.hasMany(ProductChildCategory, { foreignKey: 'subCategoryId' });
 
 // Product.hasMany(Review, { foreignKey: 'productId', onDelete: 'CASCADE' });
 // Review.belongsTo(Product, { foreignKey: 'productId' });
