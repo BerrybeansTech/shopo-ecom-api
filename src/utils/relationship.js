@@ -1,25 +1,135 @@
-const Customer = require("../models/customers.model");
-const ProductCategory = require("../models/productCategory.model");
-const ProductSubCategory = require("../models/productSubCategory.model");
-const ProductChildCategory = require("../models/productChildCategory.model");
+const Customer = require("../models/customer/customers.model");
+const Product = require("../models/product/product.model");
+const ProductCategory = require("../models/product/product-category.model");
+const ProductSubCategory = require("../models/product/product-subCategory.model");
+const ProductChildCategory = require("../models/product/product-childCategory.model");
+const ProductSeasonalCategory = require("../models/product/product-seasonalCategory.model");
+const ProductMaterial = require("../models/product/product-material.model");
+const ProductInventory = require("../models/product/product-inventory.model");
+const ProductColorVariation = require("../models/product/product-colorVariation.model");
+const ProductSizeVariation = require("../models/product/product-sizeVariation.model");
 // const Address = require('./address/model');
 
-Customer.hasOne(ApiKeys, {
-  foreignKey: "customerId",
+// ProductSubCategory ↔ ProductCategory
+ProductSubCategory.belongsTo(ProductCategory, {
+  foreignKey: "categoryId",
   onDelete: "CASCADE",
   onUpdate: "CASCADE",
 });
-ApiKeys.belongsTo(Customer, {
-  foreignKey: "customerId",
+ProductCategory.hasMany(ProductSubCategory, {
+  foreignKey: "categoryId",
   onDelete: "CASCADE",
   onUpdate: "CASCADE",
 });
 
-ProductSubCategory.belongsTo(ProductCategory, { foreignKey: 'categoryId' });
-ProductCategory.hasMany(ProductSubCategory, { foreignKey: 'categoryId' });
+// ProductChildCategory ↔ ProductSubCategory
+ProductChildCategory.belongsTo(ProductSubCategory, {
+  foreignKey: "subCategoryId",
+  onDelete: "CASCADE",
+  onUpdate: "CASCADE",
+});
+ProductSubCategory.hasMany(ProductChildCategory, {
+  foreignKey: "subCategoryId",
+  onDelete: "CASCADE",
+  onUpdate: "CASCADE",
+});
 
-ProductChildCategory.belongsTo(ProductSubCategory, { foreignKey: 'subCategoryId' });
-ProductSubCategory.hasMany(ProductChildCategory, { foreignKey: 'subCategoryId' });
+// Product ↔ ProductCategory
+Product.belongsTo(ProductCategory, {
+  foreignKey: "categoryId",
+  as: "category",
+  onDelete: "CASCADE",
+  onUpdate: "CASCADE",
+});
+ProductCategory.hasMany(Product, {
+  foreignKey: "categoryId",
+  as: "products",
+});
+
+// Product ↔ ProductSubCategory
+Product.belongsTo(ProductSubCategory, {
+  foreignKey: "subCategoryId",
+  as: "subCategory",
+  onDelete: "CASCADE",
+  onUpdate: "CASCADE",
+});
+ProductSubCategory.hasMany(Product, {
+  foreignKey: "subCategoryId",
+  as: "products",
+});
+
+// Product ↔ ProductChildCategory
+Product.belongsTo(ProductChildCategory, {
+  foreignKey: "childCategoryId",
+  as: "childCategory",
+  onDelete: "CASCADE",
+  onUpdate: "CASCADE",
+});
+ProductChildCategory.hasMany(Product, {
+  foreignKey: "childCategoryId",
+  as: "products",
+});
+
+// Product ↔ ProductMaterial
+Product.belongsTo(ProductMaterial, {
+  foreignKey: "productMaterialId",
+  as: "material",
+  onDelete: "CASCADE",
+  onUpdate: "CASCADE",
+});
+ProductMaterial.hasMany(Product, {
+  foreignKey: "productMaterialId",
+  as: "products",
+});
+
+// Product ↔ ProductSeasonalCategory
+Product.belongsTo(ProductSeasonalCategory, {
+  foreignKey: "seasonalCategoryId",
+  as: "seasonalCategory",
+  onDelete: "CASCADE",
+  onUpdate: "CASCADE",
+});
+ProductSeasonalCategory.hasMany(Product, {
+  foreignKey: "seasonalCategoryId",
+  as: "products",
+});
+
+// ProductInventory ↔ Product
+ProductInventory.belongsTo(Product, {
+  foreignKey: "productId",
+  as: "product",
+  onDelete: "CASCADE",
+  onUpdate: "CASCADE",
+});
+Product.hasMany(ProductInventory, {
+  foreignKey: "productId",
+  as: "products",
+});
+
+// ProductInventory ↔ ProductColorVariation
+ProductInventory.belongsTo(ProductColorVariation, {
+  foreignKey: "productColorVariationId",
+  as: "productColor",
+  onDelete: "CASCADE",
+  onUpdate: "CASCADE",
+});
+ProductColorVariation.hasMany(ProductInventory, {
+  foreignKey: "productColorVariationId",
+  as: "productColor",
+});
+
+// ProductInventory ↔ ProductSizeVariation
+ProductInventory.belongsTo(ProductSizeVariation, {
+  foreignKey: "productSizeVariationId",
+  as: "productSize",
+  onDelete: "CASCADE",
+  onUpdate: "CASCADE",
+});
+ProductSizeVariation.hasMany(ProductInventory, {
+  foreignKey: "productSizeVariationId",
+  as: "productSize",
+});
+
 
 // Product.hasMany(Review, { foreignKey: 'productId', onDelete: 'CASCADE' });
 // Review.belongsTo(Product, { foreignKey: 'productId' });

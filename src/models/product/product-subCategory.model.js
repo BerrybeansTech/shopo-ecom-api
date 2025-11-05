@@ -1,7 +1,8 @@
 const { DataTypes } = require('sequelize');
 const sequelize = require('../db');
+const ProductCategory = require("./product-category.model")
 
-const productSubCategory = sequelize.define('productSubCategory', {
+const ProductSubCategory = sequelize.define('ProductSubCategory', {
   id: {
     type: DataTypes.INTEGER,
     autoIncrement: true,
@@ -15,13 +16,13 @@ const productSubCategory = sequelize.define('productSubCategory', {
     type: DataTypes.INTEGER,
     allowNull: false,
     references: {
-      model: 'Category',
+      model: ProductCategory,
       key: 'id'
     }
   }
 }, {
-  tableName: 'productSubCategory',
+  tableName: 'ProductSubCategory',
   timestamps: false
 });
 
-module.exports = productSubCategory;
+module.exports = ProductSubCategory;

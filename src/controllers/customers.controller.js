@@ -1,4 +1,4 @@
-const Customers = require("../models/customers.model");
+const Customers = require("../models/customer/customers.model");
 const bcrypt = require("bcryptjs");
 const { Op } = require("sequelize");
 const sequelize = require("../config/db");

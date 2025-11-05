@@ -1,5 +1,6 @@
 const { DataTypes } = require('sequelize');
 const sequelize = require('../db');
+const ProductSubCategory = require("./product-subCategory.model")
 
 const ProductChildCategory = sequelize.define('ProductChildCategory', {
   id: {
@@ -15,14 +16,14 @@ const ProductChildCategory = sequelize.define('ProductChildCategory', {
     type: DataTypes.INTEGER,
     allowNull: false,
     references: {
-      model: "ProductSubCategory",
+      model: ProductSubCategory,
       key: 'id',
     },
     onDelete: 'CASCADE',
   },
 }, {
-  tableName: 'productChildCategory',
-  timestamps: false,
+  tableName: 'ProductChildCategory',
+  timestamps: true,
 });
 
 module.exports = ProductChildCategory;
