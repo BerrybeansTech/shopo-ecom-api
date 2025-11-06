@@ -3,7 +3,7 @@ const Product = require("../models/product/product.model");
 const ProductCategory = require("../models/product/product-category.model");
 const ProductSubCategory = require("../models/product/product-subCategory.model");
 const ProductChildCategory = require("../models/product/product-childCategory.model");
-const ProductSeasonalCategory = require("../models/product/product-seasonalCategory.model");
+const ProductOccasion = require("../models/product/product-Occasion.model");
 const ProductMaterial = require("../models/product/product-material.model");
 const ProductInventory = require("../models/product/product-inventory.model");
 const ProductColorVariation = require("../models/product/product-colorVariation.model");
@@ -83,14 +83,14 @@ ProductMaterial.hasMany(Product, {
 });
 
 // Product ↔ ProductSeasonalCategory
-Product.belongsTo(ProductSeasonalCategory, {
-  foreignKey: "seasonalCategoryId",
-  as: "seasonalCategory",
+Product.belongsTo(ProductOccasion, {
+  foreignKey: "OccasionId",
+  as: "Occasion",
   onDelete: "CASCADE",
   onUpdate: "CASCADE",
 });
-ProductSeasonalCategory.hasMany(Product, {
-  foreignKey: "seasonalCategoryId",
+ProductOccasion.hasMany(Product, {
+  foreignKey: "OccasionId",
   as: "products",
 });
 

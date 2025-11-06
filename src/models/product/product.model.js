@@ -3,7 +3,7 @@ const sequelize = require('../db');
 const ProductCategory = require("./product-category.model")
 const ProductSubCategory = require("./product-subCategory.model")
 const ProductChildCategory = require("./product-childCategory.model")
-const ProductSeasonalCategory = require("./product-seasonalCategory.model")
+const ProductOccasion = require("./product-Occasion.model")
 const ProductMaterial = require("./product-material.model")
 
 module.exports = sequelize.define('Product', {
@@ -54,11 +54,11 @@ module.exports = sequelize.define('Product', {
       key: 'id'
     }
   },
-  seasonalCategoryId: {
+  OccasionId: {
     type: DataTypes.INTEGER,
     allowNull: false,
     references: {
-      model: ProductSeasonalCategory,
+      model: Occasion,
       key: 'id'
     }
   },

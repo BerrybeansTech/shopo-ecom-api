@@ -1,7 +1,7 @@
 const { DataTypes } = require('sequelize');
 const sequelize = require('../db');
 
-const ProductSeasonalCategory = sequelize.define('ProductSeasonalCategory', {
+const ProductOccasion = sequelize.define('ProductOccasion', {
   id: {
     type: DataTypes.INTEGER,
     autoIncrement: true,
@@ -12,8 +12,8 @@ const ProductSeasonalCategory = sequelize.define('ProductSeasonalCategory', {
     allowNull: false
   }
 }, {
-  tableName: 'ProductSeasonalCategory',
+  tableName: 'ProductOccasion',
   timestamps: true
 });
 
-module.exports = ProductSeasonalCategory;
+module.exports = ProductOccasion;
