@@ -8,33 +8,40 @@ const ProductMaterial = require("../models/product/product-material.model");
 const ProductInventory = require("../models/product/product-inventory.model");
 const ProductColorVariation = require("../models/product/product-colorVariation.model");
 const ProductSizeVariation = require("../models/product/product-sizeVariation.model");
-// const Address = require('./address/model');
 
-// ProductSubCategory ↔ ProductCategory
-ProductSubCategory.belongsTo(ProductCategory, {
-  foreignKey: "categoryId",
-  onDelete: "CASCADE",
-  onUpdate: "CASCADE",
-});
+
+
+// ProductCategory → ProductSubCategory (One-to-Many)
 ProductCategory.hasMany(ProductSubCategory, {
   foreignKey: "categoryId",
+  as: "ProductSubCategories",
+  onDelete: "CASCADE",
+  onUpdate: "CASCADE",
+});
+ProductSubCategory.belongsTo(ProductCategory, {
+  foreignKey: "categoryId",
+  as: "ProductCategory",
   onDelete: "CASCADE",
   onUpdate: "CASCADE",
 });
 
-// ProductChildCategory ↔ ProductSubCategory
-ProductChildCategory.belongsTo(ProductSubCategory, {
-  foreignKey: "subCategoryId",
-  onDelete: "CASCADE",
-  onUpdate: "CASCADE",
-});
+// ProductSubCategory → ProductChildCategory (One-to-Many)
 ProductSubCategory.hasMany(ProductChildCategory, {
   foreignKey: "subCategoryId",
+  as: "ProductChildCategories",
+  onDelete: "CASCADE",
+  onUpdate: "CASCADE",
+});
+ProductChildCategory.belongsTo(ProductSubCategory, {
+  foreignKey: "subCategoryId",
+  as: "ProductSubCategory",
   onDelete: "CASCADE",
   onUpdate: "CASCADE",
 });
 
-// Product ↔ ProductCategory
+
+
+// Product → ProductCategory
 Product.belongsTo(ProductCategory, {
   foreignKey: "categoryId",
   as: "category",
@@ -46,7 +53,7 @@ ProductCategory.hasMany(Product, {
   as: "products",
 });
 
-// Product ↔ ProductSubCategory
+// Product → ProductSubCategory
 Product.belongsTo(ProductSubCategory, {
   foreignKey: "subCategoryId",
   as: "subCategory",
@@ -58,7 +65,7 @@ ProductSubCategory.hasMany(Product, {
   as: "products",
 });
 
-// Product ↔ ProductChildCategory
+// Product → ProductChildCategory
 Product.belongsTo(ProductChildCategory, {
   foreignKey: "childCategoryId",
   as: "childCategory",
@@ -70,7 +77,7 @@ ProductChildCategory.hasMany(Product, {
   as: "products",
 });
 
-// Product ↔ ProductMaterial
+// Product → ProductMaterial
 Product.belongsTo(ProductMaterial, {
   foreignKey: "productMaterialId",
   as: "material",
@@ -82,7 +89,7 @@ ProductMaterial.hasMany(Product, {
   as: "products",
 });
 
-// Product ↔ ProductSeasonalCategory
+// Product → ProductOccasion
 Product.belongsTo(ProductOccasion, {
   foreignKey: "OccasionId",
   as: "Occasion",
@@ -94,7 +101,8 @@ ProductOccasion.hasMany(Product, {
   as: "products",
 });
 
-// ProductInventory ↔ Product
+
+// ProductInventory → Product
 ProductInventory.belongsTo(Product, {
   foreignKey: "productId",
   as: "product",
@@ -103,10 +111,10 @@ ProductInventory.belongsTo(Product, {
 });
 Product.hasMany(ProductInventory, {
   foreignKey: "productId",
-  as: "products",
+  as: "inventories",
 });
 
-// ProductInventory ↔ ProductColorVariation
+// ProductInventory → ProductColorVariation
 ProductInventory.belongsTo(ProductColorVariation, {
   foreignKey: "productColorVariationId",
   as: "productColor",
@@ -115,10 +123,10 @@ ProductInventory.belongsTo(ProductColorVariation, {
 });
 ProductColorVariation.hasMany(ProductInventory, {
   foreignKey: "productColorVariationId",
-  as: "productColor",
+  as: "inventories",
 });
 
-// ProductInventory ↔ ProductSizeVariation
+// ProductInventory → ProductSizeVariation
 ProductInventory.belongsTo(ProductSizeVariation, {
   foreignKey: "productSizeVariationId",
   as: "productSize",
@@ -127,10 +135,23 @@ ProductInventory.belongsTo(ProductSizeVariation, {
 });
 ProductSizeVariation.hasMany(ProductInventory, {
   foreignKey: "productSizeVariationId",
-  as: "productSize",
+  as: "inventories",
 });
 
 
+
+module.exports = {
+  Customer,
+  Product,
+  ProductCategory,
+  ProductSubCategory,
+  ProductChildCategory,
+  ProductOccasion,
+  ProductMaterial,
+  ProductInventory,
+  ProductColorVariation,
+  ProductSizeVariation
+};
 // Product.hasMany(Review, { foreignKey: 'productId', onDelete: 'CASCADE' });
 // Review.belongsTo(Product, { foreignKey: 'productId' });
 

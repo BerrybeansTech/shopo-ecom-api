@@ -1,12 +1,8 @@
+// product.model.js
 const { DataTypes } = require('sequelize');
-const sequelize = require('../db');
-const ProductCategory = require("./product-category.model")
-const ProductSubCategory = require("./product-subCategory.model")
-const ProductChildCategory = require("./product-childCategory.model")
-const ProductOccasion = require("./product-Occasion.model")
-const ProductMaterial = require("./product-material.model")
+const sequelize = require('../../config/db');
 
-module.exports = sequelize.define('Product', {
+const Product = sequelize.define('Product', {
   id: {
     type: DataTypes.INTEGER,
     autoIncrement: true,
@@ -33,42 +29,22 @@ module.exports = sequelize.define('Product', {
   categoryId: {
     type: DataTypes.INTEGER,
     allowNull: false,
-    references: {
-      model: ProductCategory,
-      key: 'id'
-    }
   },
   subCategoryId: {
     type: DataTypes.INTEGER,
     allowNull: false,
-    references: {
-      model: ProductSubCategory,
-      key: 'id'
-    }
   },
   childCategoryId: {
     type: DataTypes.INTEGER,
     allowNull: false,
-    references: {
-      model: ProductChildCategory,
-      key: 'id'
-    }
   },
   OccasionId: {
     type: DataTypes.INTEGER,
     allowNull: false,
-    references: {
-      model: Occasion,
-      key: 'id'
-    }
   },
   productMaterialId: {
     type: DataTypes.INTEGER,
     allowNull: false,
-    references: {
-      model: ProductMaterial,
-      key: 'id'
-    }
   },
   thumbnailImage: {
     type: DataTypes.JSON
@@ -89,13 +65,13 @@ module.exports = sequelize.define('Product', {
     type: DataTypes.TEXT,
     allowNull: true
   },
-  status:  {
-    type: DataTypes.ENUM("active","inactive","deleted"),
+  status: {
+    type: DataTypes.ENUM("active", "inactive", "deleted"),
     defaultValue: "active"
   }
-
 }, {
   tableName: 'Product',
   timestamps: true,
 });
 
+module.exports = Product;

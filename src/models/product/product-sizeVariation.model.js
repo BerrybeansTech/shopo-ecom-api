@@ -1,5 +1,6 @@
+// src/models/product/product-sizeVariation.model.js
 const { DataTypes } = require('sequelize');
-const sequelize = require('../db');
+const sequelize = require('../../config/db');
 
 const productSizeVariation = sequelize.define('productSizeVariation', {
   id: {
@@ -7,8 +8,12 @@ const productSizeVariation = sequelize.define('productSizeVariation', {
     autoIncrement: true,
     primaryKey: true
   },
+  type: {
+    type: DataTypes.ENUM('topwear', 'bottomwear'),
+    allowNull: false
+  },
   size: {
-    type: DataTypes.STRING,
+    type: DataTypes.JSON, // ✅ Supports both string and array
     allowNull: false
   }
 }, {
