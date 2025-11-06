@@ -105,49 +105,48 @@ const createCustomers = async (req, res) => {
         .json({ success: false, message: "Password is required" });
     }
 
-    const validation = await validateOtpToken({
-      type: "customer-registration",
-      identifier: phone,
-      token: otpToken,
-    });
-
-    if (!validation.success) {
-      return res.status(403).json(validation);
-    }
-
-
-    const resetKey = `reset:customer-registration:${email}`;
-    await redisClient.del(resetKey);
-
-  
-    const hashedPassword = await bcrypt.hash(password, 10);
-
-   
     const newCustomer = await sequelize.transaction(async (transaction) => {
-    
       const existingUser = await Customers.findOne({ where: { email }, transaction });
       if (existingUser) {
         throw new Error("Email already registered");
       }
 
- 
       const existingPhone = await Customers.findOne({ where: { phone }, transaction });
       if (existingPhone) {
         throw new Error("Phone number already registered");
       }
 
-  
-      return await Customers.create({
-        name,
-        email,
-        phone,
-        password: hashedPassword,
-        address,
-        city,
-        state,
-        country,
-        postalCode,
-      }, { transaction });
+      const validation = await validateOtpToken({
+        type: "customer-registration",
+        identifier: phone,
+        token: otpToken,
+      });
+
+      if (!validation.success) {
+        throw new Error("Invalid or expired OTP");
+      }
+
+      const resetKey = `reset:customer-registration:${email}`;
+      await redisClient.del(resetKey);
+
+      const hashedPassword = await bcrypt.hash(password, 10);
+
+      const customer = await Customers.create(
+        {
+          name,
+          email,
+          phone,
+          password: hashedPassword,
+          address,
+          city,
+          state,
+          country,
+          postalCode,
+        },
+        { transaction }
+      );
+
+      return customer;
     });
 
     const payload = {
@@ -167,39 +166,37 @@ const createCustomers = async (req, res) => {
       maxAge: parseInt(process.env.COOKIE_MAX_AGE || 7 * 24 * 60 * 60 * 1000),
     });
 
-    res.json({
+    return res.json({
       success: true,
       message: "Customer registered successfully",
       data: { customer: newCustomer, accessToken },
     });
   } catch (error) {
     console.error("Error creating customer:", error);
-    console.error("Error name:", error.name);
-    console.error("Error message:", error.message);
 
-
-    if (error.message === "Email already registered" || error.message === "Phone number already registered") {
-      return res.status(400).json({
-        success: false,
-        message: error.message
-      });
+    if (
+      error.message === "Email already registered" ||
+      error.message === "Phone number already registered"
+    ) {
+      return res.status(400).json({ success: false, message: error.message });
     }
 
-    if (error.name === 'SequelizeUniqueConstraintError') {
+    if (error.name === "SequelizeUniqueConstraintError") {
       const field = error.errors[0]?.path;
       return res.status(400).json({
         success: false,
-        message: `This ${field} is already registered`
+        message: `This ${field} is already registered`,
       });
     }
 
-    res.status(500).json({
+    return res.status(500).json({
       success: false,
       message: "Failed to create customer",
-      error: error.message
+      error: error.message,
     });
   }
 };
+
 
 const customerLogin = async (req, res) => {
   const { email, phone, password } = req.body;

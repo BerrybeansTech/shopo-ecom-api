@@ -11,6 +11,7 @@ require("./utils/relationship");
 
 const customerRoutes = require("./routes/customers.routes.js");
 const otpRoutes = require("./routes/otp.routes.js");
+const adminUserRoutes = require("./routes/adminUsers.routes.js");
 const supportRoutes = require("./routes/support.routes.js");
 const categoriesRoutes = require("./routes/categorys.route.js");
 const colorVariationRoutes = require("./routes/colorVariation.routes");
@@ -34,6 +35,7 @@ app.use(apiRateLimiter);
 app.use("/customer", customerRoutes);
 app.use("/otp", otpRoutes);
 app.use("/support", supportRoutes);
+app.use("/admin-user", adminUserRoutes);
 app.use("/categories", categoriesRoutes);
 
 app.use("/color-variations", colorVariationRoutes);

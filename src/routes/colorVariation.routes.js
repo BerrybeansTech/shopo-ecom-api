@@ -6,7 +6,7 @@ const {
   getColorVariationById,
   updateColorVariation,
   deleteColorVariation
-} = require("../controllers/colorVariation/colorVariation.controller");
+} = require("../controllers/product/colorVariation.controller");
 
 router.post("/", createColorVariation);
 router.get("/", getAllColorVariations);
