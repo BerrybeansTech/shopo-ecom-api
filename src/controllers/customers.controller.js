@@ -352,6 +352,48 @@ const deleteCustomers = async (req, res) => {
   }
 };
 
+const checkUserExists = async (req, res) => {
+  try {
+    const { email, phone } = req.query;
+    
+    if (!email && !phone) {
+      return res.status(400).json({
+        success: false,
+        message: "Please provide email or phone number as query parameter"
+      });
+    }
+
+    const whereClause = [];
+    
+    if (email) {
+      whereClause.push({ email });
+    }
+    
+    if (phone) {
+      whereClause.push({ phone });
+    }
+
+    const existingUser = await Customers.findOne({
+      where: {
+        [Op.or]: whereClause
+      },
+      attributes: ['id']
+    });
+
+    res.json({
+      success: true,
+      isExists: !!existingUser
+    });
+    
+  } catch (error) {
+    console.error("Error checking user existence:", error);
+    res.status(500).json({
+      success: false,
+      message: "Failed to check user existence"
+    });
+  }
+};
+
 module.exports = {
   getAllCustomers,
   getCustomersById,
@@ -360,4 +402,5 @@ module.exports = {
   resetPassword,
   updateCustomers,
   deleteCustomers,
+  checkUserExists,
 };
