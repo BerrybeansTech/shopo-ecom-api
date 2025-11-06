@@ -1,5 +1,5 @@
 const { DataTypes } = require('sequelize');
-const sequelize = require('../db');
+const sequelize = require('../../config/db');
 const Product = require("./product.model")
 const ProductColorVariation = require("./product-colorVariation.model")
 const ProductSizeVariation = require("./product-sizeVariation.model")

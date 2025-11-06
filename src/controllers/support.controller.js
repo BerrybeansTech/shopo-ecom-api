@@ -1,4 +1,4 @@
-const Support = require("../models/support.model");
+const Support = require("../models/support/support.model");
 const { Op } = require("sequelize");
 
 
