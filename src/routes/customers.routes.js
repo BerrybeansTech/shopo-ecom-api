@@ -14,5 +14,6 @@ router.post('/login', CustomerController.customerLogin);
 router.post('/reset-password', CustomerController.resetPassword);
 router.put('/update-customer', authenticateToken.authenticateToken, CustomerController.updateCustomers);
 router.delete('/delete-customer/:id', authenticateToken.authenticateToken, CustomerController.deleteCustomers);
+router.get('/check-exists', CustomerController.checkUserExists);
 
 module.exports = router;
