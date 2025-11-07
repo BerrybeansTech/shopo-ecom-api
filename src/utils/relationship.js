@@ -162,7 +162,8 @@ module.exports = {
   ProductMaterial,
   ProductInventory,
   ProductColorVariation,
-  ProductSizeVariation
+  ProductSizeVariation,
+  ProductSizeChart
 };
 // Product.hasMany(Review, { foreignKey: 'productId', onDelete: 'CASCADE' });
 // Review.belongsTo(Product, { foreignKey: 'productId' });

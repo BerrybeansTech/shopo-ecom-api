@@ -1,5 +1,6 @@
 const express = require("express");
 const router = express.Router();
+const upload = require("../config/multer.config");
 const {
   createColorVariation,
   getAllColorVariations,
@@ -17,6 +18,7 @@ const {
 const categoryController = require("../controllers/product/categorys.controller");
 const OccasionController = require("../controllers/product/Occasion.controller");
 const MaterialController = require("../controllers/product/material.controller");
+const sizeChartController = require("../controllers/product/sizeChart.controller");
 
 router.post("/material/create", MaterialController.createMaterial);
 router.get("/material/get-all", MaterialController.getAllMaterials);
@@ -32,9 +34,9 @@ router.put("/occasion/update/:id", OccasionController.updateOccasion);
 router.delete("/occasion/delete/:id", OccasionController.deleteOccasion);
 
 
-router.post("/category/category", categoryController.createCategory);
+router.post("/category/category", upload.single("image"), categoryController.createCategory);
 router.get("/category/get-all", categoryController.getAllCategories);
-router.put("/category/update/:id", categoryController.updateCategory);
+router.put("/category/update/:id", upload.single("image"), categoryController.updateCategory);
 router.delete("/category/delete/:id", categoryController.deleteCategory);
 
 
@@ -60,5 +62,11 @@ router.get("/color/get-all", getAllColorVariations);
 router.get("/color/get-color/:id", getColorVariationById);
 router.put("/color/update-color/:id", updateColorVariation);
 router.delete("/color/delete-color/:id", deleteColorVariation);
+
+router.get("/size-chart/get-all", sizeChartController.getAllSizeCharts);
+router.get("/size-chart/get-size-chart/:id", sizeChartController.getSizeChartById);
+router.post("/size-chart/create", sizeChartController.createSizeChart);
+router.put("/size-chart/update/:id", sizeChartController.updateSizeChart);
+router.delete("/size-chart/delete/:id", sizeChartController.deleteSizeChart);
 
 module.exports = router;
