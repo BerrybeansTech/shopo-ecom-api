@@ -1,10 +1,14 @@
-const Product = require("../models/product.model");
-const ProductCategory = require("../models/productCategory.model");
-const ProductSubCategory = require("../models/productSubCategory.model");
-// const ProductReview = require("../productReview/model");
 const path = require("path");
 const fs = require("fs");
 const { Op, fn, col, where, cast, literal } = require("sequelize");
+const sequelize = require("../../config/db");
+
+const Product = require("../../models/product/product.model");
+const ProductCategory = require("../../models/product/product-category.model");
+const ProductSubCategory = require("../../models/product/product-subCategory.model");
+const ProductInventory = require("../../models/product/product-inventory.model");
+// const ProductSubCategory = require("../models/productSubCategory.model");
+// const ProductReview = require("../productReview/model");
 
 const getAllProduct = async (req, res) => {
   try {
@@ -256,7 +260,7 @@ const getProductById = async (req, res) => {
 //    subCategoryId: "",
 //    childCategoryId: "",
 //    aparelDetials: {
-//        materialId: "", 
+//        materialId: "",
 //        fitType: "",
 //        occasionId: "",
 //        seasonal: "",
@@ -277,22 +281,25 @@ const getProductById = async (req, res) => {
 // }
 
 const createProduct = async (req, res) => {
-  const {
-    name,
-    description,
-    price,
-    subCategoryId,
-    postedBy,
-    priceLable,
-    gst,
-    hsnCode,
-    brandName,
-    benefits,
-    expiresOn,
-    additionalInformation,
-  } = req.body;
-
+  const transaction = await sequelize.transaction();
   try {
+    const {
+      name,
+      description,
+      metaTitle,
+      metaDescription,
+      careInstructions,
+      categoryId,
+      subCategoryId,
+      childCategoryId,
+      aparelDetials,
+      inventory,
+      mrp,
+      sellingPrice,
+      gst,
+    } = req.body;
+
+    // handle file uploads
     const thumbnailImage = req.files?.thumbnailImage?.[0]
       ? `${process.env.FILE_PATH}${req.files.thumbnailImage[0].filename}`
       : null;
@@ -303,22 +310,57 @@ const createProduct = async (req, res) => {
         )
       : [];
 
-    const newProduct = await Product.create({
-      name,
-      description,
-      price: parseInt(price),
-      subCategoryId,
-      postedBy,
-      priceLable,
-      gst,
-      hsnCode,
-      brandName,
-      benefits,
-      expiresOn,
-      additionalInformation,
-      thumbnailImage,
-      galleryImage,
-    });
+    let parsedApparelDetails = JSON.parse(aparelDetials);
+    // if (typeof aparelDetials === "string") {
+    //   try {
+    //     parsedApparelDetails = JSON.parse(aparelDetials);
+    //   } catch (err) {
+    //     console.warn("Invalid aparelDetials format:", aparelDetials);
+    //   }
+    // } else {
+    //   parsedApparelDetails = aparelDetials || {};
+    // }
+
+    console.log(
+      "parsedApparelDetails.......................................",
+      typeof parsedApparelDetails,
+      parsedApparelDetails.occasionId
+    );
+    const newProduct = await Product.create(
+      {
+        name,
+        description,
+        metaTitle,
+        metaDescription,
+        careInstructions,
+        categoryId,
+        subCategoryId,
+        childCategoryId,
+        materialId: parsedApparelDetails.materialId,
+        fitType: parsedApparelDetails.fitType,
+        occasionId: parsedApparelDetails.occasionId,
+        seasonal: parsedApparelDetails.seasonal,
+        mrp: parseFloat(mrp),
+        sellingPrice: parseFloat(sellingPrice),
+        gst: parseFloat(gst),
+        thumbnailImage,
+        galleryImage: JSON.stringify(galleryImage),
+      },
+      { transaction }
+    );
+
+    if (Array.isArray(inventory) && inventory.length > 0) {
+      const inventoryRecords = inventory.map((item) => ({
+        productId: newProduct.id,
+        color: item.color,
+        size: item.size,
+        availableQty: item.availableQty,
+      }));
+
+      await ProductInventory.bulkCreate(inventoryRecords, { transaction });
+    }
+
+    await transaction.commit();
 
     res.json({
       success: true,
@@ -327,12 +369,15 @@ const createProduct = async (req, res) => {
     });
   } catch (error) {
     console.error("Error creating Product:", error);
+    await transaction.rollback();
     res.status(500).json({
       success: false,
-      message: "Failed to create Product",
+      message: "Failed to create product",
+      error: error.message,
     });
   }
 };
+
 const updateProduct = async (req, res) => {
   let {
     id,
@@ -358,7 +403,7 @@ const updateProduct = async (req, res) => {
       "typeof oldGalleryImage",
       typeof oldGalleryImage,
       oldGalleryImage
-    ); 
+    );
     if (typeof oldGalleryImage == "string") {
       try {
         oldGalleryImage = JSON.parse(oldGalleryImage);
