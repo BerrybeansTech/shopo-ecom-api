@@ -245,6 +245,37 @@ const getProductById = async (req, res) => {
   }
 };
 
+// create product sample body:
+// {
+//    name:"",
+//    description: "",
+//    metaTitle: "",
+//    metaDescription: "",
+//    careInstructions: "",
+//    categoryId: "",
+//    subCategoryId: "",
+//    childCategoryId: "",
+//    aparelDetials: {
+//        materialId: "", 
+//        fitType: "",
+//        occasionId: "",
+//        seasonal: "",
+//     },
+//    inventory: {
+//         {
+//            color: "",
+//            size: "",
+//            availableQty: ""
+//          }
+//      },
+//     mrp: "",
+//     sellingPrice: "",
+//     gst: "",
+//     thumbnailImage: "",
+//     galleryImage: ""
+//    }
+// }
+
 const createProduct = async (req, res) => {
   const {
     name,

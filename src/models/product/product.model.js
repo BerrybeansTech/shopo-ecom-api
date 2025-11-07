@@ -1,6 +1,11 @@
 // product.model.js
 const { DataTypes } = require('sequelize');
 const sequelize = require('../../config/db');
+const ProductCategory = require("./product-category.model")
+const ProductSubCategory = require("./product-subCategory.model")
+const ProductChildCategory = require("./product-childCategory.model")
+const ProductOccasion = require("./product-Occasion.model");
+const ProductMaterial = require('./product-material.model');
 
 const Product = sequelize.define('Product', {
   id: {
@@ -26,25 +31,48 @@ const Product = sequelize.define('Product', {
   fitType: {
     type: DataTypes.TEXT,
   },
+  seasonal: {
+    type: DataTypes.TEXT,
+  },
   categoryId: {
     type: DataTypes.INTEGER,
     allowNull: false,
+    references: {
+      model: ProductCategory,
+      key: 'id'
+    }
   },
   subCategoryId: {
     type: DataTypes.INTEGER,
     allowNull: false,
+    references: {
+      model: ProductSubCategory,
+      key: 'id',
+    }
   },
   childCategoryId: {
     type: DataTypes.INTEGER,
     allowNull: false,
+    references: {
+      model: ProductChildCategory,
+      key: 'id',
+    }
   },
   OccasionId: {
     type: DataTypes.INTEGER,
     allowNull: false,
+    references: {
+      model: ProductOccasion,
+      key: 'id',
+    }
   },
   productMaterialId: {
     type: DataTypes.INTEGER,
     allowNull: false,
+    references: {
+      model: ProductMaterial,
+      key: 'id',
+    }
   },
   thumbnailImage: {
     type: DataTypes.JSON
