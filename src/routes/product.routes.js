@@ -1,6 +1,6 @@
 const express = require("express");
 const router = express.Router();
-const upload = require("../config/multer.config");
+const upload = require('../config/multer.config')
 const {
   createColorVariation,
   getAllColorVariations,
@@ -18,7 +18,18 @@ const {
 const categoryController = require("../controllers/product/categorys.controller");
 const OccasionController = require("../controllers/product/Occasion.controller");
 const MaterialController = require("../controllers/product/material.controller");
+const ProductController = require("../controllers/product/product.controller");
 const sizeChartController = require("../controllers/product/sizeChart.controller");
+
+
+router.post('/create-product', upload.fields([
+    { name: "thumbnailImage", maxCount: 1 },
+    { name: "galleryImage", maxCount: 10 }, 
+  ]), ProductController.createProduct);
+// router.put('/update-product', authenticateToken.authenticateToken, upload.fields([
+//     { name: "thumbnailImage", maxCount: 1 },
+//     { name: "galleryImage", maxCount: 10 }, 
+//   ]),  productController.updateProduct);
 
 router.post("/material/create", MaterialController.createMaterial);
 router.get("/material/get-all", MaterialController.getAllMaterials);

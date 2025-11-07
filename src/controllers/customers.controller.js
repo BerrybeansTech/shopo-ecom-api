@@ -260,9 +260,11 @@ const resetPassword = async (req, res) => {
     }
 
     // Find user by email or phone
-    const whereClause = email ? { email } : { phone };
-    const user = await Customers.findOne({ where: whereClause });
+    const whereClause = {};
+    if (email && email.trim() !== "") whereClause.email = email.trim();
+    else if (phone && phone.trim() !== "") whereClause.phone = phone.trim();
 
+    const user = await Customers.findOne({ where: whereClause });
     if (!user) {
       return res
         .status(404)
