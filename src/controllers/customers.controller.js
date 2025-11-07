@@ -253,18 +253,30 @@ const customerLogin = async (req, res) => {
 
 const resetPassword = async (req, res) => {
   try {
-    const { email, newPassword, otpToken } = req.body;
+    const { email, phone, newPassword, otpToken } = req.body;
 
-    const user = await Customers.findOne({ where: { email } });
+    // Check that at least one identifier is provided
+    if (!email && !phone) {
+      return res
+        .status(400)
+        .json({ success: false, message: "Email or phone number is required" });
+    }
+
+    // Find user by email or phone
+    const whereClause = email ? { email } : { phone };
+    const user = await Customers.findOne({ where: whereClause });
+
     if (!user) {
       return res
         .status(404)
-        .json({ success: false, message: "User not found with this email" });
+        .json({ success: false, message: "User not found with this email or phone" });
     }
 
+    // Validate OTP for the correct identifier
+    const identifier = email || phone;
     const validation = await validateOtpToken({
       type: "reset-password",
-      identifier: email,
+      identifier,
       token: otpToken,
     });
 
@@ -272,8 +284,9 @@ const resetPassword = async (req, res) => {
       return res.status(403).json(validation);
     }
 
+    // Hash and update the new password
     const hashedPassword = await bcrypt.hash(newPassword, 10);
-    await Customers.update({ password: hashedPassword }, { where: { email } });
+    await Customers.update({ password: hashedPassword }, { where: whereClause });
 
     res.json({
       success: true,
@@ -287,6 +300,7 @@ const resetPassword = async (req, res) => {
     });
   }
 };
+
 
 
 const updateCustomers = async (req, res) => {

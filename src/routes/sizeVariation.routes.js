@@ -6,7 +6,7 @@ const {
   getSizeVariationById,
   updateSizeVariation,
   deleteSizeVariation
-} = require("../controllers/sizeVariation/sizeVariation.controller");
+} = require("../controllers/product/sizeVariation.controller");
 
 router.post("/", createSizeVariation);
 router.get("/", getAllSizeVariations);
