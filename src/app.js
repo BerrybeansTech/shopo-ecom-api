@@ -11,13 +11,10 @@ require("./utils/relationship");
 
 const customerRoutes = require("./routes/customers.routes.js");
 const otpRoutes = require("./routes/otp.routes.js");
+const adminUserRoutes = require("./routes/adminUsers.routes.js");
 const supportRoutes = require("./routes/support.routes.js");
-const categoriesRoutes = require("./routes/categorys.route.js");
-const colorVariationRoutes = require("./routes/colorVariation.routes");
-const sizeVariationRoutes = require("./routes/sizeVariation.routes");
+const productRoutes = require("./routes/product.routes.js");
 const inventoryRoutes = require("./routes/inventory.routes");
-const materialRoutes = require("./routes/material.routes");
-const occasionRoutes = require("./routes/Occasion.routes.js");
 const app = express();
 
 const corsOptions = {
@@ -37,14 +34,9 @@ app.use(apiRateLimiter);
 app.use("/customer", customerRoutes);
 app.use("/otp", otpRoutes);
 app.use("/support", supportRoutes);
-app.use("/categories", categoriesRoutes);
-
-app.use("/color-variations", colorVariationRoutes);
-app.use("/size-variations", sizeVariationRoutes);
-
+app.use("/admin-user", adminUserRoutes);
+app.use("/product", productRoutes);
 app.use("/inventory", inventoryRoutes);
-app.use("/material", materialRoutes);
-app.use("/occasion", occasionRoutes);
 
 app.use(errorHandler);
 
