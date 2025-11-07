@@ -9,7 +9,12 @@ exports.createCategory = async (req, res) => {
     const { name } = req.body;
     if (!name) return res.status(400).json({ success: false, message: "Category name is required" });
 
-    const category = await ProductCategory.create({ name });
+    let image = null;
+    if (req.file) {
+      image = `${process.env.FILE_PATH}${req.file.filename}`;
+    }
+
+    const category = await ProductCategory.create({ name, image });
     res.status(201).json({ success: true, message: "Category created successfully", data: category });
   } catch (error) {
     console.error("Create Category Error:", error);
@@ -46,6 +51,11 @@ exports.updateCategory = async (req, res) => {
     if (!category) return res.status(404).json({ success: false, message: "Category not found" });
 
     category.name = name || category.name;
+
+    if (req.file) {
+      category.image = `${process.env.FILE_PATH}${req.file.filename}`;
+    }
+
     await category.save();
 
     res.status(200).json({ success: true, message: "Category updated successfully", data: category });

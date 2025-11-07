@@ -1,0 +1,238 @@
+const ProductSizeChart = require("../../models/product/product-sizeChart.model");
+const ProductCategory = require("../../models/product/product-category.model");
+const path = require("path");
+const fs = require("fs");
+
+const getAllSizeCharts = async (req, res) => {
+  try {
+    const sizeCharts = await ProductSizeChart.findAll({
+      include: [
+        {
+          model: ProductCategory,
+          attributes: ['id', 'name']
+        }
+      ]
+    });
+
+    const baseUrl = `${req.protocol}://${req.get("host")}/`;
+
+    const updatedSizeCharts = sizeCharts.map((chart) => {
+      const data = chart.toJSON();
+      if (Array.isArray(data.image)) {
+        data.image = data.image.map((imgPath) => `${baseUrl}${imgPath}`);
+      }
+      return data;
+    });
+
+    res.json({
+      success: true,
+      data: updatedSizeCharts
+    });
+  } catch (error) {
+    console.error("Error retrieving size charts:", error);
+    res.status(500).json({
+      success: false,
+      message: "Failed to retrieve size charts"
+    });
+  }
+};
+
+const getSizeChartById = async (req, res) => {
+  const { id } = req.params;
+
+  try {
+    const sizeChart = await ProductSizeChart.findOne({
+      where: { id },
+      include: [
+        {
+          model: ProductCategory,
+          attributes: ['id', 'name']
+        }
+      ]
+    });
+
+    if (!sizeChart) {
+      return res.status(404).json({
+        success: false,
+        message: "Size chart not found"
+      });
+    }
+
+    const baseUrl = `${req.protocol}://${req.get("host")}/`;
+    const data = sizeChart.toJSON();
+    if (Array.isArray(data.image)) {
+      data.image = data.image.map((imgPath) => `${baseUrl}${imgPath}`);
+    }
+
+    res.json({
+      success: true,
+      data: data
+    });
+  } catch (error) {
+    console.error("Error retrieving size chart:", error);
+    res.status(500).json({
+      success: false,
+      message: "Failed to retrieve size chart"
+    });
+  }
+};
+
+const createSizeChart = async (req, res) => {
+  try {
+    const { categoryId } = req.body;
+
+    // Check if category exists (optional)
+    if (categoryId) {
+      const category = await ProductCategory.findByPk(categoryId);
+      if (!category) {
+        return res.status(404).json({
+          success: false,
+          message: "Category not found"
+        });
+      }
+    }
+
+    // Handle file uploads
+    let image = [];
+
+    if (req.files?.image?.length > 0) {
+      image = req.files.image.map(file => `${process.env.FILE_PATH}${file.filename}`);
+    } else {
+      return res.status(400).json({
+        success: false,
+        message: "At least one image is required"
+      });
+    }
+
+    const sizeChart = await ProductSizeChart.create({
+      categoryId,
+      image
+    });
+
+    res.status(201).json({
+      success: true,
+      message: "Size chart created successfully",
+      data: sizeChart
+    });
+  } catch (error) {
+    console.error("Error creating size chart:", error);
+    res.status(500).json({
+      success: false,
+      message: "Failed to create size chart"
+    });
+  }
+};
+
+const updateSizeChart = async (req, res) => {
+  const { id } = req.params;
+  let { categoryId, oldImage = [] } = req.body;
+
+  try {
+    const existing = await ProductSizeChart.findByPk(id);
+
+    if (!existing) {
+      return res.status(404).json({
+        success: false,
+        message: "Size chart not found"
+      });
+    }
+
+    // Parse oldImage if it's a string
+    if (typeof oldImage === "string") {
+      try {
+        oldImage = JSON.parse(oldImage);
+      } catch (err) {
+        oldImage = [];
+      }
+    }
+    oldImage = oldImage.map((img) => {
+      const uploadIndex = img.indexOf("uploads/");
+      return uploadIndex !== -1 ? img.slice(uploadIndex) : img;
+    });
+
+    let image = [...oldImage];
+
+    // Remove deleted images
+    const removedImages = (existing.image || []).filter(
+      (img) => !oldImage.includes(img)
+    );
+
+    for (const img of removedImages) {
+      const oldImagePath = path.join(__dirname, "..", "..", img);
+      if (fs.existsSync(oldImagePath)) {
+        fs.unlinkSync(oldImagePath);
+      }
+    }
+
+    // Add new images
+    if (req.files?.image?.length > 0) {
+      const newImages = req.files.image.map(file => `${process.env.FILE_PATH}${file.filename}`);
+      image = [...image, ...newImages];
+    }
+
+    await ProductSizeChart.update(
+      {
+        categoryId: categoryId || existing.categoryId,
+        image
+      },
+      { where: { id } }
+    );
+
+    res.json({
+      success: true,
+      message: "Size chart updated successfully"
+    });
+  } catch (error) {
+    console.error("Error updating size chart:", error);
+    res.status(500).json({
+      success: false,
+      message: "Failed to update size chart"
+    });
+  }
+};
+
+const deleteSizeChart = async (req, res) => {
+  const { id } = req.params;
+
+  try {
+    const sizeChart = await ProductSizeChart.findByPk(id);
+
+    if (!sizeChart) {
+      return res.status(404).json({
+        success: false,
+        message: "Size chart not found"
+      });
+    }
+
+    // Delete associated images
+    if (Array.isArray(sizeChart.image)) {
+      sizeChart.image.forEach((imgPath) => {
+        const fullPath = path.join(__dirname, "..", "..", imgPath);
+        if (fs.existsSync(fullPath)) {
+          fs.unlinkSync(fullPath);
+        }
+      });
+    }
+
+    await ProductSizeChart.destroy({ where: { id } });
+
+    res.json({
+      success: true,
+      message: "Size chart deleted successfully"
+    });
+  } catch (error) {
+    console.error("Error deleting size chart:", error);
+    res.status(500).json({
+      success: false,
+      message: "Failed to delete size chart"
+    });
+  }
+};
+
+module.exports = {
+  getAllSizeCharts,
+  getSizeChartById,
+  createSizeChart,
+  updateSizeChart,
+  deleteSizeChart
+};
