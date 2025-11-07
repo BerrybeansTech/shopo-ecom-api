@@ -10,6 +10,10 @@ const ProductCategory = sequelize.define('ProductCategory', {
   name: {
     type: DataTypes.STRING,
     allowNull: false
+  },
+  image: {
+    type: DataTypes.STRING,
+    allowNull: true
   }
 }, {
   tableName: 'ProductCategory',
