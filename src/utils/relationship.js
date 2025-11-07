@@ -8,6 +8,7 @@ const ProductMaterial = require("../models/product/product-material.model");
 const ProductInventory = require("../models/product/product-inventory.model");
 const ProductColorVariation = require("../models/product/product-colorVariation.model");
 const ProductSizeVariation = require("../models/product/product-sizeVariation.model");
+const ProductSizeChart = require("../models/product/product-sizeChart.model");
 
 
 
@@ -138,6 +139,17 @@ ProductSizeVariation.hasMany(ProductInventory, {
   as: "inventories",
 });
 
+// ProductSizeChart → ProductCategory
+ProductSizeChart.belongsTo(ProductCategory, {
+  foreignKey: "categoryId",
+  as: "category",
+  onDelete: "CASCADE",
+  onUpdate: "CASCADE",
+});
+ProductCategory.hasOne(ProductSizeChart, {
+  foreignKey: "categoryId",
+  as: "productSize",
+});
 
 
 module.exports = {

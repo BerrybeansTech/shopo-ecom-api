@@ -18,8 +18,7 @@ const ProductChildCategory = sequelize.define('ProductChildCategory', {
     references: {
       model: ProductSubCategory,
       key: 'id',
-    },
-    onDelete: 'CASCADE',
+    }
   },
 }, {
   tableName: 'ProductChildCategory',

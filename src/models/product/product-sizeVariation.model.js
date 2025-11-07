@@ -13,7 +13,7 @@ const productSizeVariation = sequelize.define('productSizeVariation', {
     allowNull: false
   },
   size: {
-    type: DataTypes.JSON, // ✅ Supports both string and array
+    type: DataTypes.JSON,
     allowNull: false
   }
 }, {
