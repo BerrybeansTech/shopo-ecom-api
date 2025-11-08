@@ -1,5 +1,7 @@
 const express = require('express');
-const CustomerController = require('../controllers/customers.controller')
+const CustomerController = require('../controllers/customer/customers.controller')
+const CartController = require('../controllers/customer/cart.controller')
+const CartItemsController = require('../controllers/customer/cartItems.controller')
 
 // const upload = require('../utils/multer')
 
@@ -15,5 +17,17 @@ router.post('/reset-password', CustomerController.resetPassword);
 router.put('/update-customer', authenticateToken.authenticateToken, CustomerController.updateCustomers);
 router.delete('/delete-customer/:id', authenticateToken.authenticateToken, CustomerController.deleteCustomers);
 router.get('/check-exists', CustomerController.checkUserExists);
+
+// Cart routes
+router.get('/cart', authenticateToken.authenticateToken, CartController.getCart);
+router.post('/cart', authenticateToken.authenticateToken, CartController.createCart);
+router.put('/cart', authenticateToken.authenticateToken, CartController.updateCart);
+router.delete('/cart', authenticateToken.authenticateToken, CartController.deleteCart);
+
+// Cart items routes
+router.get('/cart/items', authenticateToken.authenticateToken, CartItemsController.getCartItems);
+router.post('/cart/items', authenticateToken.authenticateToken, CartItemsController.addItem);
+router.put('/cart/items/:id', authenticateToken.authenticateToken, CartItemsController.updateItem);
+router.delete('/cart/items/:id', authenticateToken.authenticateToken, CartItemsController.removeItem);
 
 module.exports = router;

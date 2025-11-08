@@ -1,13 +1,13 @@
-const Customers = require("../models/customer/customers.model");
+const Customers = require("../../models/customer/customers.model");
 const bcrypt = require("bcryptjs");
 const { Op } = require("sequelize");
-const sequelize = require("../config/db");
-const redisClient = require("../config/redis.config");
-const { validateOtpToken } = require("../services/otp.service");
+const sequelize = require("../../config/db");
+const redisClient = require("../../config/redis.config");
+const { validateOtpToken } = require("../../services/otp.service");
 const {
   generateAccessToken,
   generateRefreshToken,
-} = require("../services/jwt.service");
+} = require("../../services/jwt.service");
 // const { OAuth2Client } = require("google-auth-library");
 // const client = new OAuth2Client(process.env.GOOGLE_CLIENT_ID);
 
