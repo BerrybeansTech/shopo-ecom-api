@@ -9,7 +9,8 @@ const ProductInventory = require("../models/product/product-inventory.model");
 const ProductColorVariation = require("../models/product/product-colorVariation.model");
 const ProductSizeVariation = require("../models/product/product-sizeVariation.model");
 const ProductSizeChart = require("../models/product/product-sizeChart.model");
-
+const Cart = require("../models/customer/cart.model")
+const CartItems = require("../models/customer/cartItems.model")
 
 
 // ProductCategory → ProductSubCategory (One-to-Many)
@@ -152,6 +153,14 @@ ProductCategory.hasOne(ProductSizeChart, {
 });
 
 
+Cart.hasMany(CartItems, { foreignKey: 'cartId' });
+CartItems.belongsTo(Cart, { foreignKey: 'cartId' });
+
+Product.hasMany(CartItems, { foreignKey: 'productId' });
+CartItems.belongsTo(Product, { foreignKey: 'productId' });
+
+
+
 module.exports = {
   Customer,
   Product,
@@ -189,9 +198,3 @@ module.exports = {
 
 // // Customer.hasMany(Address, { foreignKey: 'customerId' });
 // // Address.belongsTo(Customer, { foreignKey: 'customerId' });
-
-// Cart.hasMany(CartItem, { foreignKey: 'cartId' });
-// CartItem.belongsTo(Cart, { foreignKey: 'cartId' });
-
-// Product.hasMany(CartItem, { foreignKey: 'productId' });
-// CartItem.belongsTo(Product, { foreignKey: 'productId' });

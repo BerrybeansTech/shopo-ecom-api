@@ -19,7 +19,7 @@ async function startServer() {
     await db.authenticate();
     console.log("DB connected");
 
-    await db.sync({ alter:false });
+    await db.sync({ alter: false });
     console.log("Models synced");
 
     app.listen(PORT, () => {
