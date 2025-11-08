@@ -1,4 +1,5 @@
 const Customers = require("../../models/customer/customers.model");
+const Cart = require("../../models/customer/cart.model");
 const bcrypt = require("bcryptjs");
 const { Op } = require("sequelize");
 const sequelize = require("../../config/db");
@@ -10,7 +11,6 @@ const {
 } = require("../../services/jwt.service");
 // const { OAuth2Client } = require("google-auth-library");
 // const client = new OAuth2Client(process.env.GOOGLE_CLIENT_ID);
-
 
 const getAllCustomers = async (req, res) => {
   try {
@@ -60,7 +60,6 @@ const getAllCustomers = async (req, res) => {
   }
 };
 
-
 const getCustomersById = async (req, res) => {
   const { id } = req.params;
 
@@ -83,8 +82,8 @@ const getCustomersById = async (req, res) => {
   }
 };
 
-
 const createCustomers = async (req, res) => {
+  const transaction = await sequelize.transaction();
   try {
     const {
       otpToken,
@@ -100,60 +99,82 @@ const createCustomers = async (req, res) => {
     } = req.body;
 
     if (!password || password.trim() === "") {
+      await transaction.rollback();
       return res
         .status(400)
         .json({ success: false, message: "Password is required" });
     }
 
-    const newCustomer = await sequelize.transaction(async (transaction) => {
-      const existingUser = await Customers.findOne({ where: { email }, transaction });
-      if (existingUser) {
-        throw new Error("Email already registered");
-      }
+    const existingUser = await Customers.findOne({
+      where: { email },
+      transaction,
+    });
+    if (existingUser) {
+      await transaction.rollback();
+      return res
+        .status(400)
+        .json({ success: false, message: "Email already registered" });
+    }
 
-      const existingPhone = await Customers.findOne({ where: { phone }, transaction });
-      if (existingPhone) {
-        throw new Error("Phone number already registered");
-      }
+    const existingPhone = await Customers.findOne({
+      where: { phone },
+      transaction,
+    });
+    if (existingPhone) {
+      await transaction.rollback();
+      return res
+        .status(400)
+        .json({ success: false, message: "Phone number already registered" });
+    }
 
-      const validation = await validateOtpToken({
-        type: "customer-registration",
-        identifier: phone,
-        token: otpToken,
-      });
-
-      if (!validation.success) {
-        throw new Error("Invalid or expired OTP");
-      }
-
-      const resetKey = `reset:customer-registration:${email}`;
-      await redisClient.del(resetKey);
-
-      const hashedPassword = await bcrypt.hash(password, 10);
-
-      const customer = await Customers.create(
-        {
-          name,
-          email,
-          phone,
-          password: hashedPassword,
-          address,
-          city,
-          state,
-          country,
-          postalCode,
-        },
-        { transaction }
-      );
-
-      return customer;
+    const validation = await validateOtpToken({
+      type: "customer-registration",
+      identifier: phone,
+      token: otpToken,
     });
 
+    if (!validation.success) {
+      await transaction.rollback();
+      return res
+        .status(400)
+        .json({ success: false, message: "Invalid or expired OTP" });
+    }
+
+    const resetKey = `reset:customer-registration:${email}`;
+    await redisClient.del(resetKey);
+
+    const hashedPassword = await bcrypt.hash(password, 10);
+
+    const customer = await Customers.create(
+      {
+        name,
+        email,
+        phone,
+        password: hashedPassword,
+        address,
+        city,
+        state,
+        country,
+        postalCode,
+      },
+      { transaction }
+    );
+
+    await Cart.create(
+      {
+        customerId: customer.id,
+        isActive: true,
+      },
+      { transaction }
+    );
+
+    await transaction.commit();
+
     const payload = {
-      id: newCustomer.id,
-      name: newCustomer.name,
-      email: newCustomer.email,
-      phone: newCustomer.phone,
+      id: customer.id,
+      name: customer.name,
+      email: customer.email,
+      phone: customer.phone,
     };
 
     const accessToken = generateAccessToken(payload);
@@ -169,9 +190,11 @@ const createCustomers = async (req, res) => {
     return res.json({
       success: true,
       message: "Customer registered successfully",
-      data: { customer: newCustomer, accessToken },
+      data: { customer, accessToken },
     });
   } catch (error) {
+    if (transaction) await transaction.rollback();
+
     console.error("Error creating customer:", error);
 
     if (
@@ -197,7 +220,6 @@ const createCustomers = async (req, res) => {
   }
 };
 
-
 const customerLogin = async (req, res) => {
   const { email, phone, password } = req.body;
 
@@ -215,7 +237,9 @@ const customerLogin = async (req, res) => {
 
     const isMatch = await bcrypt.compare(password, user.password);
     if (!isMatch)
-      return res.status(401).json({ message: "Invalid email/phone or password" });
+      return res
+        .status(401)
+        .json({ message: "Invalid email/phone or password" });
 
     const payload = {
       id: user.id,
@@ -246,8 +270,6 @@ const customerLogin = async (req, res) => {
   }
 };
 
-
-
 const resetPassword = async (req, res) => {
   try {
     const { email, phone, newPassword, otpToken } = req.body;
@@ -268,7 +290,10 @@ const resetPassword = async (req, res) => {
     if (!user) {
       return res
         .status(404)
-        .json({ success: false, message: "User not found with this email or phone" });
+        .json({
+          success: false,
+          message: "User not found with this email or phone",
+        });
     }
 
     // Validate OTP for the correct identifier
@@ -285,7 +310,10 @@ const resetPassword = async (req, res) => {
 
     // Hash and update the new password
     const hashedPassword = await bcrypt.hash(newPassword, 10);
-    await Customers.update({ password: hashedPassword }, { where: whereClause });
+    await Customers.update(
+      { password: hashedPassword },
+      { where: whereClause }
+    );
 
     res.json({
       success: true,
@@ -299,8 +327,6 @@ const resetPassword = async (req, res) => {
     });
   }
 };
-
-
 
 const updateCustomers = async (req, res) => {
   try {
@@ -319,7 +345,9 @@ const updateCustomers = async (req, res) => {
 
     const existing = await Customers.findByPk(id);
     if (!existing) {
-      return res.status(404).json({ success: false, message: "Customer not found" });
+      return res
+        .status(404)
+        .json({ success: false, message: "Customer not found" });
     }
 
     await Customers.update(
@@ -336,7 +364,6 @@ const updateCustomers = async (req, res) => {
     });
   }
 };
-
 
 const deleteCustomers = async (req, res) => {
   const { id } = req.params;
@@ -368,41 +395,40 @@ const deleteCustomers = async (req, res) => {
 const checkUserExists = async (req, res) => {
   try {
     const { email, phone } = req.query;
-    
+
     if (!email && !phone) {
       return res.status(400).json({
         success: false,
-        message: "Please provide email or phone number as query parameter"
+        message: "Please provide email or phone number as query parameter",
       });
     }
 
     const whereClause = [];
-    
+
     if (email) {
       whereClause.push({ email });
     }
-    
+
     if (phone) {
       whereClause.push({ phone });
     }
 
     const existingUser = await Customers.findOne({
       where: {
-        [Op.or]: whereClause
+        [Op.or]: whereClause,
       },
-      attributes: ['id']
+      attributes: ["id"],
     });
 
     res.json({
       success: true,
-      isExists: !!existingUser
+      isExists: !!existingUser,
     });
-    
   } catch (error) {
     console.error("Error checking user existence:", error);
     res.status(500).json({
       success: false,
-      message: "Failed to check user existence"
+      message: "Failed to check user existence",
     });
   }
 };
