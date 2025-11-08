@@ -1,6 +1,6 @@
 // models/CartItem.js
 const { DataTypes } = require("sequelize");
-const sequelize = require("../db");
+const sequelize = require("../../config/db");
 const Cart = require("./cart.model");
 const Product = require("../product/product.model");
 const ProductColorVariation = require("../product/product-colorVariation.model")

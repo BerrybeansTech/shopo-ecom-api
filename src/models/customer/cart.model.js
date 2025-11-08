@@ -1,6 +1,5 @@
 const { DataTypes } = require('sequelize');
-const sequelize = require('../db');
-const Customer = require('./customers.model');
+const sequelize = require('../../config/db');
 
 const Cart = sequelize.define('Cart', {
   id: {
@@ -9,10 +8,10 @@ const Cart = sequelize.define('Cart', {
     primaryKey: true,
   },
   customerId: {
-    type: DataTypes.INTEGER,
+    type: DataTypes.UUID,
     allowNull: false,
     references: {
-      model: Customer,
+      model: 'Customers',
       key: 'id',
     },
     onDelete: 'CASCADE',
