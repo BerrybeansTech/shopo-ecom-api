@@ -42,6 +42,26 @@ exports.getAllCategories = async (req, res) => {
   }
 };
 
+exports.getCategoryById = async (req, res) => {
+  try {
+    const { id } = req.params;
+    const category = await ProductCategory.findByPk(id, {
+      include: [
+        {
+          model: ProductSubCategory,
+          as: "ProductSubCategories",
+          include: [{ model: ProductChildCategory, as: "ProductChildCategories" }],
+        },
+      ],
+    });
+    if (!category) return res.status(404).json({ success: false, message: "Category not found" });
+    res.status(200).json({ success: true, data: category });
+  } catch (error) {
+    console.error("Get Category By Id Error:", error);
+    res.status(500).json({ success: false, message: error.message });
+  }
+};
+
 exports.updateCategory = async (req, res) => {
   try {
     const { id } = req.params;
@@ -112,6 +132,23 @@ exports.getAllSubCategories = async (req, res) => {
   }
 };
 
+exports.getSubCategoryById = async (req, res) => {
+  try {
+    const { id } = req.params;
+    const subCategory = await ProductSubCategory.findByPk(id, {
+      include: [
+        { model: ProductCategory, attributes: ["id", "name"] },
+        { model: ProductChildCategory, as: "ProductChildCategories" },
+      ],
+    });
+    if (!subCategory) return res.status(404).json({ success: false, message: "Subcategory not found" });
+    res.status(200).json({ success: true, data: subCategory });
+  } catch (error) {
+    console.error("Get SubCategory By Id Error:", error);
+    res.status(500).json({ success: false, message: error.message });
+  }
+};
+
 
 exports.updateSubCategory = async (req, res) => {
   try {
@@ -172,6 +209,20 @@ exports.getAllChildCategories = async (req, res) => {
     res.status(200).json({ success: true, data: childCategories });
   } catch (error) {
     console.error("Get ChildCategories Error:", error);
+    res.status(500).json({ success: false, message: error.message });
+  }
+};
+
+exports.getChildCategoryById = async (req, res) => {
+  try {
+    const { id } = req.params;
+    const childCategory = await ProductChildCategory.findByPk(id, {
+      include: [{ model: ProductSubCategory, attributes: ["id", "name"] }],
+    });
+    if (!childCategory) return res.status(404).json({ success: false, message: "Child category not found" });
+    res.status(200).json({ success: true, data: childCategory });
+  } catch (error) {
+    console.error("Get ChildCategory By Id Error:", error);
     res.status(500).json({ success: false, message: error.message });
   }
 };
