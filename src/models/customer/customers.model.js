@@ -96,13 +96,13 @@ const Customers = sequelize.define('Customers', {
 }, {
   tableName: 'Customers',
   timestamps: true,
-  hooks: {
-    afterCreate: async (customer, options) => {
-      await Cart.create({
-        customerId: customer.id
-      });
-    }
-  }
+  // hooks: {
+  //   afterCreate: async (customer, options) => {
+  //     await Cart.create({
+  //       customerId: customer.id
+  //     });
+  //   }
+  // }
 });
 
 module.exports = Customers;

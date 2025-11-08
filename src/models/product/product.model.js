@@ -34,46 +34,6 @@ const Product = sequelize.define('Product', {
   seasonal: {
     type: DataTypes.TEXT,
   },
-  categoryId: {
-    type: DataTypes.INTEGER,
-    allowNull: false,
-    references: {
-      model: ProductCategory,
-      key: 'id'
-    }
-  },
-  subCategoryId: {
-    type: DataTypes.INTEGER,
-    allowNull: false,
-    references: {
-      model: ProductSubCategory,
-      key: 'id',
-    }
-  },
-  childCategoryId: {
-    type: DataTypes.INTEGER,
-    allowNull: false,
-    references: {
-      model: ProductChildCategory,
-      key: 'id',
-    }
-  },
-  OccasionId: {
-    type: DataTypes.INTEGER,
-    allowNull: false,
-    references: {
-      model: ProductOccasion,
-      key: 'id',
-    }
-  },
-  productMaterialId: {
-    type: DataTypes.INTEGER,
-    allowNull: false,
-    references: {
-      model: ProductMaterial,
-      key: 'id',
-    }
-  },
   thumbnailImage: {
     type: DataTypes.JSON
   },

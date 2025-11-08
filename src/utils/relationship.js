@@ -9,6 +9,7 @@ const ProductInventory = require("../models/product/product-inventory.model");
 const ProductColorVariation = require("../models/product/product-colorVariation.model");
 const ProductSizeVariation = require("../models/product/product-sizeVariation.model");
 const ProductSizeChart = require("../models/product/product-sizeChart.model");
+const ProductReview = require("../models/product/product-review");
 const Cart = require("../models/customer/cart.model");
 const CartItems = require("../models/customer/cartItems.model");
 
@@ -90,13 +91,13 @@ ProductMaterial.hasMany(Product, {
 
 // Product → ProductOccasion
 Product.belongsTo(ProductOccasion, {
-  foreignKey: "OccasionId",
-  as: "Occasion",
+  foreignKey: "occasionId",
+  as: "occasion",
   onDelete: "CASCADE",
   onUpdate: "CASCADE",
 });
 ProductOccasion.hasMany(Product, {
-  foreignKey: "OccasionId",
+  foreignKey: "occasionId",
   as: "products",
 });
 
@@ -207,6 +208,12 @@ CartItems.belongsTo(ProductColorVariation, {
   onUpdate: "CASCADE",
 });
 
+Product.hasMany(ProductReview, { foreignKey: 'productId', onDelete: 'CASCADE' });
+ProductReview.belongsTo(Product, { foreignKey: 'productId' });
+
+Customer.hasMany(ProductReview, { foreignKey: 'customerId' });
+ProductReview.belongsTo(Customer, { foreignKey: 'customerId' });
+
 
 module.exports = {
   Customer,
@@ -221,11 +228,6 @@ module.exports = {
   ProductSizeVariation,
   ProductSizeChart,
 };
-// Product.hasMany(Review, { foreignKey: 'productId', onDelete: 'CASCADE' });
-// Review.belongsTo(Product, { foreignKey: 'productId' });
-
-// Customer.hasMany(Review, { foreignKey: 'customerId' });
-// Review.belongsTo(Customer, { foreignKey: 'customerId' });
 
 // Category.hasMany(SubCategory, {
 //   foreignKey: 'categoryId',
