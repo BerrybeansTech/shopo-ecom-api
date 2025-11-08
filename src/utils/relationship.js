@@ -150,6 +150,21 @@ ProductCategory.hasOne(ProductSizeChart, {
 
 // cart 
 
+Customer.hasOne(Cart, {
+  foreignKey: "customerId",
+  as: "carts",
+  onDelete: "CASCADE",
+  onUpdate: "CASCADE",
+});
+
+Cart.belongsTo(Customer, {
+  foreignKey: "customerId",
+  as: "customer",
+  onDelete: "CASCADE",
+  onUpdate: "CASCADE",
+});
+
+
 Cart.hasMany(CartItems, {
   foreignKey: "cartId",
   as: "items",

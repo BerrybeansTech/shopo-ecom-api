@@ -17,34 +17,18 @@ const CartItem = sequelize.define(
     cartId: {
       type: DataTypes.INTEGER,
       allowNull: false,
-      references: {
-        model: Cart,
-        key: "id",
-      },
-      onDelete: "CASCADE",
     },
     productId: {
       type: DataTypes.INTEGER,
-      references: {
-        model: Product,
-        key: "id",
-      },
+      allowNull: false,
     },
     productColorVariationId: {
       type: DataTypes.INTEGER,
       allowNull: false,
-      references: {
-        model: ProductColorVariation,
-        key: "id",
-      },
     },
     productSizeVariationId: {
       type: DataTypes.INTEGER,
       allowNull: false,
-      references: {
-        model: ProductSizeVariation,
-        key: "id",
-      },
     },
     quantity: {
       type: DataTypes.INTEGER,

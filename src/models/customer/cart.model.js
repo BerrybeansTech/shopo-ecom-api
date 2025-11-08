@@ -1,5 +1,6 @@
 const { DataTypes } = require('sequelize');
 const sequelize = require('../../config/db');
+const Customer = require('./customers.model');
 
 const Cart = sequelize.define('Cart', {
   id: {
@@ -9,12 +10,7 @@ const Cart = sequelize.define('Cart', {
   },
   customerId: {
     type: DataTypes.UUID,
-    allowNull: false,
-    references: {
-      model: 'Customers',
-      key: 'id',
-    },
-    onDelete: 'CASCADE',
+    allowNull: false
   },
   isActive: {
     type: DataTypes.BOOLEAN,
