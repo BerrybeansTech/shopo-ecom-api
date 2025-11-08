@@ -9,9 +9,8 @@ const ProductInventory = require("../models/product/product-inventory.model");
 const ProductColorVariation = require("../models/product/product-colorVariation.model");
 const ProductSizeVariation = require("../models/product/product-sizeVariation.model");
 const ProductSizeChart = require("../models/product/product-sizeChart.model");
-const Cart = require("../models/customer/cart.model")
-const CartItems = require("../models/customer/cartItems.model")
-
+const Cart = require("../models/customer/cart.model");
+const CartItems = require("../models/customer/cartItems.model");
 
 // ProductCategory → ProductSubCategory (One-to-Many)
 ProductCategory.hasMany(ProductSubCategory, {
@@ -40,8 +39,6 @@ ProductChildCategory.belongsTo(ProductSubCategory, {
   onDelete: "CASCADE",
   onUpdate: "CASCADE",
 });
-
-
 
 // Product → ProductCategory
 Product.belongsTo(ProductCategory, {
@@ -103,7 +100,6 @@ ProductOccasion.hasMany(Product, {
   as: "products",
 });
 
-
 // ProductInventory → Product
 ProductInventory.belongsTo(Product, {
   foreignKey: "productId",
@@ -152,13 +148,64 @@ ProductCategory.hasOne(ProductSizeChart, {
   as: "productSize",
 });
 
+// cart 
 
-Cart.hasMany(CartItems, { foreignKey: 'cartId' });
-CartItems.belongsTo(Cart, { foreignKey: 'cartId' });
+Customer.hasOne(Cart, {
+  foreignKey: "customerId",
+  as: "carts",
+  onDelete: "CASCADE",
+  onUpdate: "CASCADE",
+});
 
-Product.hasMany(CartItems, { foreignKey: 'productId' });
-CartItems.belongsTo(Product, { foreignKey: 'productId' });
+Cart.belongsTo(Customer, {
+  foreignKey: "customerId",
+  as: "customer",
+  onDelete: "CASCADE",
+  onUpdate: "CASCADE",
+});
 
+
+Cart.hasMany(CartItems, {
+  foreignKey: "cartId",
+  as: "items",
+  onDelete: "CASCADE",
+  onUpdate: "CASCADE",
+});
+
+CartItems.belongsTo(Cart, {
+  foreignKey: "cartId",
+  as: "cart",
+  onDelete: "CASCADE",
+  onUpdate: "CASCADE",
+});
+
+Product.hasMany(CartItems, {
+  foreignKey: "productId",
+  as: "cartItems",
+  onDelete: "CASCADE",
+  onUpdate: "CASCADE",
+});
+
+CartItems.belongsTo(Product, {
+  foreignKey: "productId",
+  as: "product",
+  onDelete: "CASCADE",
+  onUpdate: "CASCADE",
+});
+
+ProductColorVariation.hasMany(CartItems, {
+  foreignKey: "productColorVariationId",
+  as: "cartItems",
+  onDelete: "CASCADE",
+  onUpdate: "CASCADE",
+});
+
+CartItems.belongsTo(ProductColorVariation, {
+  foreignKey: "productColorVariationId",
+  as: "colorVariation",
+  onDelete: "CASCADE",
+  onUpdate: "CASCADE",
+});
 
 
 module.exports = {
@@ -172,7 +219,7 @@ module.exports = {
   ProductInventory,
   ProductColorVariation,
   ProductSizeVariation,
-  ProductSizeChart
+  ProductSizeChart,
 };
 // Product.hasMany(Review, { foreignKey: 'productId', onDelete: 'CASCADE' });
 // Review.belongsTo(Product, { foreignKey: 'productId' });
