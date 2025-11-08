@@ -47,20 +47,23 @@ router.delete("/occasion/delete/:id", OccasionController.deleteOccasion);
 
 router.post("/category/category", upload.single("image"), categoryController.createCategory);
 router.get("/category/get-all", categoryController.getAllCategories);
+router.get("/category/get-category/:id", categoryController.getCategoryById);
 router.put("/category/update/:id", upload.single("image"), categoryController.updateCategory);
 router.delete("/category/delete/:id", categoryController.deleteCategory);
 
 
 router.post("/subcategory/create", categoryController.createSubCategory);
 router.get("/subcategory/get-all", categoryController.getAllSubCategories);
+router.get("/subcategory/get-subcategory/:id", categoryController.getSubCategoryById);
 router.put("/subcategory/update/:id", categoryController.updateSubCategory);
 router.delete("/subcategory/delete/:id", categoryController.deleteSubCategory);
 
 
 router.post("/childcategory/create", categoryController.createChildCategory);
 router.get("/childcategory/get-all", categoryController.getAllChildCategories);
-router.put("/childcategory/:id", categoryController.updateChildCategory);
-router.delete("/childcategory/:id", categoryController.deleteChildCategory);
+router.get("/childcategory/get-childcategory/:id", categoryController.getChildCategoryById);
+router.put("/childcategory/update/:id", categoryController.updateChildCategory);
+router.delete("/childcategory/delete/:id", categoryController.deleteChildCategory);
 
 router.post("/size/create", createSizeVariation);
 router.get("/size/get-all", getAllSizeVariations);
