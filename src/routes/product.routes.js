@@ -22,6 +22,8 @@ const ProductController = require("../controllers/product/product.controller");
 const sizeChartController = require("../controllers/product/sizeChart.controller");
 
 
+router.get("/get-all-product", ProductController.getAllProduct);
+router.get("/get-product/:id", ProductController.getProductById);
 router.post('/create-product', upload.fields([
     { name: "thumbnailImage", maxCount: 1 },
     { name: "galleryImage", maxCount: 10 }, 

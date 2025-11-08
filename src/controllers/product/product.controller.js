@@ -6,44 +6,45 @@ const sequelize = require("../../config/db");
 const Product = require("../../models/product/product.model");
 const ProductCategory = require("../../models/product/product-category.model");
 const ProductSubCategory = require("../../models/product/product-subCategory.model");
+const ProductChildCategory = require("../../models/product/product-childCategory.model");
 const ProductInventory = require("../../models/product/product-inventory.model");
+const ProductMaterial = require("../../models/product/product-material.model");
+const ProductColorVariation = require("../../models/product/product-colorVariation.model");
+const ProductSizeVariation = require("../../models/product/product-sizeVariation.model");
+const ProductOccasion = require("../../models/product/product-Occasion.model");
 // const ProductSubCategory = require("../models/productSubCategory.model");
-// const ProductReview = require("../productReview/model");
+const ProductReview = require("../../models/product/product-review");
 
 const getAllProduct = async (req, res) => {
   try {
     const {
-      newArrival,
       name,
       category,
       subCategory,
+      childCategory,
+      productColor,
+      productSize,
+      occasion,
       status,
-      userId,
-      brandName,
       minPrice,
       maxPrice,
+      newArrival,
     } = req.query;
 
     const baseUrl = `${req.protocol}://${req.get("host")}/`;
     const whereClause = {};
 
     if (name) whereClause.name = { [Op.like]: `%${name}%` };
-    if (category) whereClause.category = category;
-    if (brandName) whereClause.brandName = brandName;
     if (status) whereClause.status = status;
+    if (occasion) whereClause.occasionId = occasion;
+    if (category) whereClause.categoryId = category;
     if (subCategory) whereClause.subCategoryId = subCategory;
-    if (userId) whereClause.postedBy = userId;
+    if (childCategory) whereClause.childCategoryId = childCategory;
 
     if (minPrice || maxPrice) {
-      whereClause.price = {};
-
-      if (minPrice) {
-        whereClause.price[Op.gte] = parseInt(minPrice);
-      }
-
-      if (maxPrice) {
-        whereClause.price[Op.lte] = parseInt(maxPrice);
-      }
+      whereClause.sellingPrice = {};
+      if (minPrice) whereClause.sellingPrice[Op.gte] = parseFloat(minPrice);
+      if (maxPrice) whereClause.sellingPrice[Op.lte] = parseFloat(maxPrice);
     }
 
     const page = parseInt(req.query.page) || 1;
@@ -61,29 +62,82 @@ const getAllProduct = async (req, res) => {
           "galleryImage",
           "additionalInformation",
         ],
+        include: [
+          [
+            literal(`(
+        SELECT IFNULL(AVG(rating), 0)
+        FROM productreview AS pr
+        WHERE pr.productId = Product.id
+      )`),
+            "averageRating",
+          ],
+          [
+            literal(`(
+        SELECT COUNT(*)
+        FROM productreview AS pr
+        WHERE pr.productId = Product.id
+      )`),
+            "reviewCount",
+          ],
+        ],
       },
       include: [
         {
           model: ProductReview,
+          as: "productReviews",
           attributes: [],
           required: false,
         },
+        {
+          model: ProductCategory,
+          as: "category",
+          attributes: ["id", "name"],
+        },
+        {
+          model: ProductSubCategory,
+          as: "subCategory",
+          attributes: ["id", "name"],
+        },
+        {
+          model: ProductChildCategory,
+          as: "childCategory",
+          attributes: ["id", "name"],
+        },
+        {
+          model: ProductOccasion,
+          as: "occasion",
+          attributes: ["id", "name"],
+        },
+        {
+          model: ProductInventory,
+          as: "inventories",
+          include: [
+            {
+              model: ProductColorVariation,
+              as: "productColor",
+              attributes: ["id", "color"],
+              where: productColor ? { color: productColor } : undefined,
+              required: !!productColor,
+            },
+            {
+              model: ProductSizeVariation,
+              as: "productSize",
+              attributes: ["id", "size"],
+              where: productSize ? { size: productSize } : undefined,
+              required: !!productSize,
+            },
+          ],
+          attributes: ["id", "availableQuantity"],
+          required: false,
+        },
       ],
-      attributes: {
-        include: [
-          [fn("AVG", col("productReviews.rating")), "averageRating"],
-          [fn("COUNT", col("productReviews.id")), "reviewCount"],
-        ],
-      },
-      group: ["Product.id"],
-
-      group: ["Product.id"],
+      // group: ["Product.id"],
       subQuery: false,
       order: [["createdAt", "DESC"]],
     };
 
     if (newArrival) {
-      queryOptions.where = { status: "approved" };
+      queryOptions.where.status = "approved";
       queryOptions.limit = 5;
       queryOptions.order = [["createdAt", "DESC"]];
     }
@@ -92,14 +146,25 @@ const getAllProduct = async (req, res) => {
 
     const updatedProducts = products.map((product) => {
       const data = product.toJSON();
+
       data.thumbnailImage = data.thumbnailImage
         ? `${baseUrl}${data.thumbnailImage}`
         : null;
-      data.averageRating = parseFloat(
-        data.ProductReviews?.averageRating || 0
-      ).toFixed(1);
-      data.reviewCount = parseInt(data.ProductReviews?.reviewCount || 0);
-      delete data.ProductReviews;
+
+      let galleryArray = [];
+      if (data.galleryImage) {
+        try {
+          galleryArray = Array.isArray(data.galleryImage)
+            ? data.galleryImage
+            : JSON.parse(data.galleryImage);
+        } catch {
+          galleryArray = [];
+        }
+      }
+
+      data.galleryImage = galleryArray.map((img) => `${baseUrl}${img}`);
+      data.averageRating = parseFloat(data.averageRating || 0).toFixed(1);
+      data.reviewCount = parseInt(data.reviewCount || 0);
       return data;
     });
 
@@ -123,10 +188,11 @@ const getAllProduct = async (req, res) => {
           }),
     });
   } catch (error) {
-    console.error("error", error);
+    console.error("Error retrieving products:", error);
     res.status(500).json({
       success: false,
       message: "Failed to retrieve Products",
+      error: error.message,
     });
   }
 };
@@ -198,53 +264,115 @@ const getAllCategoriesWithSubcategories = async (req, res) => {
     });
   }
 };
-
 const getProductById = async (req, res) => {
   const { id } = req.params;
 
   try {
     const baseUrl = `${req.protocol}://${req.get("host")}/`;
 
-    const t = await Product.findOne({
+    const product = await Product.findOne({
       where: { id },
       include: [
         {
-          model: ProductReview,
-          attributes: [], // don't fetch all reviews, just for aggregation
+          model: ProductCategory,
+          as: "category",
+          attributes: ["id", "name"],
+        },
+        {
+          model: ProductSubCategory,
+          as: "subCategory",
+          attributes: ["id", "name"],
+        },
+        {
+          model: ProductChildCategory,
+          as: "childCategory",
+          attributes: ["id", "name"],
+        },
+        {
+          model: ProductMaterial,
+          as: "material",
+          attributes: ["id", "name"],
+        },
+        {
+          model: ProductOccasion,
+          as: "occasion",
+          attributes: ["id", "name"],
+        },
+        {
+          model: ProductInventory,
+          as: "inventories",
+          include: [
+            {
+              model: ProductColorVariation,
+              as: "productColor",
+              attributes: ["id", "color"],
+            },
+            {
+              model: ProductSizeVariation,
+              as: "productSize",
+              attributes: ["id", "size"],
+            },
+          ],
+          attributes: ["id", "availableQuantity"],
         },
       ],
-      attributes: {
-        include: [
-          [fn("AVG", col("productReviews.rating")), "averageRating"],
-          [fn("COUNT", col("productReviews.id")), "reviewCount"],
-        ],
-      },
-      group: ["Product.id"], // required with aggregation
     });
 
-    if (!t) {
-      return res
-        .status(404)
-        .json({ success: false, message: "Product not found" });
+    if (!product) {
+      return res.status(404).json({
+        success: false,
+        message: "Product not found",
+      });
+    }
+    let galleryArray = [];
+    if (product.galleryImage) {
+      try {
+        galleryArray = Array.isArray(product.galleryImage)
+          ? product.galleryImage
+          : JSON.parse(product.galleryImage);
+      } catch (err) {
+        console.error("Invalid galleryImage JSON:", product.galleryImage);
+        galleryArray = [];
+      }
     }
 
-    const updatedThumbnailImage = `${baseUrl}${t.thumbnailImage}`;
-    const updatedGalleryImage = Array.isArray(t.galleryImage)
-      ? t.galleryImage.map((imgPath) => `${baseUrl}${imgPath}`)
-      : [];
+    const updatedThumbnailImage = product.thumbnailImage
+      ? `${baseUrl}${product.thumbnailImage}`
+      : null;
+    console.log(
+      "Array.isArray(product.galleryImage)",
+      Array.isArray(product.galleryImage),
+      product.galleryImage
+    );
+
+    const updatedGalleryImage = galleryArray.map(
+      (imgPath) => `${baseUrl}${imgPath}`
+    );
+
+    const ratings = product.productReviews?.map((r) => r.rating) || [];
+    const averageRating =
+      ratings.length > 0
+        ? (ratings.reduce((sum, r) => sum + r, 0) / ratings.length).toFixed(1)
+        : 0;
 
     const updatedProduct = {
-      ...t.toJSON(),
-      galleryImage: updatedGalleryImage,
+      ...product.toJSON(),
       thumbnailImage: updatedThumbnailImage,
+      galleryImage: updatedGalleryImage,
+      averageRating,
+      reviewCount: ratings.length,
     };
 
-    res.json({ success: true, data: updatedProduct });
+    res.status(200).json({
+      success: true,
+      data: updatedProduct,
+    });
   } catch (error) {
-    console.log("error", error);
+    console.error("Error retrieving product:", error);
     res.status(500).json({
       success: false,
-      message: "Failed to retrieve Product by id",
+      message: "Failed to retrieve Product details",
+      error: error.message,
     });
   }
 };
@@ -282,6 +410,7 @@ const getProductById = async (req, res) => {
 
 const createProduct = async (req, res) => {
   const transaction = await sequelize.transaction();
+
   try {
     const {
       name,
@@ -299,7 +428,7 @@ const createProduct = async (req, res) => {
       gst,
     } = req.body;
 
-    // handle file uploads
+    // Handle file uploads
     const thumbnailImage = req.files?.thumbnailImage?.[0]
       ? `${process.env.FILE_PATH}${req.files.thumbnailImage[0].filename}`
       : null;
@@ -310,22 +439,16 @@ const createProduct = async (req, res) => {
         )
       : [];
 
-    let parsedApparelDetails = JSON.parse(aparelDetials);
-    // if (typeof aparelDetials === "string") {
-    //   try {
-    //     parsedApparelDetails = JSON.parse(aparelDetials);
-    //   } catch (err) {
-    //     console.warn("Invalid aparelDetials format:", aparelDetials);
-    //   }
-    // } else {
-    //   parsedApparelDetails = aparelDetials || {};
-    // }
+    let parsedApparelDetails = {};
+    try {
+      parsedApparelDetails =
+        typeof aparelDetials === "string"
+          ? JSON.parse(aparelDetials)
+          : aparelDetials || {};
+    } catch (err) {
+      console.warn("Invalid aparelDetials JSON:", aparelDetials);
+    }
 
-    console.log(
-      "parsedApparelDetails.......................................",
-      typeof parsedApparelDetails,
-      parsedApparelDetails.occasionId
-    );
     const newProduct = await Product.create(
       {
         name,
@@ -336,10 +459,10 @@ const createProduct = async (req, res) => {
         categoryId,
         subCategoryId,
         childCategoryId,
-        materialId: 1,
-        fitType: "test",
-        occasionId: 1,
-        seasonal: "test",
+        productMaterialId: parsedApparelDetails.productMaterialId,
+        fitType: parsedApparelDetails.fitType,
+        occasionId: parsedApparelDetails.occasionId,
+        seasonal: parsedApparelDetails.seasonal,
         mrp: parseFloat(mrp),
         sellingPrice: parseFloat(sellingPrice),
         gst: parseFloat(gst),
@@ -349,15 +472,46 @@ const createProduct = async (req, res) => {
       { transaction }
     );
 
-    if (Array.isArray(inventory) && inventory.length > 0) {
-      const inventoryRecords = inventory.map((item) => ({
-        productId: newProduct.id,
-        color: item.color,
-        size: item.size,
-        availableQty: item.availableQty,
-      }));
+    let parsedInventory = [];
+    try {
+      let rawInventory = inventory;
 
-      await ProductInventory.bulkCreate(inventoryRecords, { transaction });
+      if (typeof rawInventory === "string") {
+        rawInventory = rawInventory.trim();
+
+        parsedInventory = JSON.parse(rawInventory);
+      } else if (Array.isArray(rawInventory)) {
+        parsedInventory = rawInventory;
+      }
+
+      if (!Array.isArray(parsedInventory)) parsedInventory = [];
+    } catch (err) {
+      console.warn("Invalid inventory JSON:", inventory);
+      parsedInventory = [];
+    }
+
+    if (parsedInventory.length > 0) {
+      const inventoryRecords = parsedInventory
+        .filter(
+          (item) =>
+            item.productColorVariationId &&
+            item.productSizeVariationId &&
+            item.availableQuantity
+        )
+        .map((item) => ({
+          productId: newProduct.id,
+          productColorVariationId: parseInt(item.productColorVariationId, 10),
+          productSizeVariationId: parseInt(item.productSizeVariationId, 10),
+          availableQuantity: parseInt(item.availableQuantity, 10),
+        }));
+
+      if (inventoryRecords.length > 0) {
+        await ProductInventory.bulkCreate(inventoryRecords, { transaction });
+      } else {
+        console.warn("No valid inventory records to insert.");
+      }
+    } else {
+      console.warn("Inventory is empty or invalid.");
     }
 
     await transaction.commit();
