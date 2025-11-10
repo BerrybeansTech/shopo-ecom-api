@@ -73,7 +73,7 @@ exports.getAllReviews = async (req, res) => {
         },
         {
           model: Customer,
-          attributes: ["id", "firstName", "lastName", "email"]
+          attributes: ["id", "name", "email"]
         }
       ],
       order: [["createdAt", "DESC"]]
@@ -101,7 +101,7 @@ exports.getReviewsByProduct = async (req, res) => {
       include: [
         {
           model: Customer,
-          attributes: ["id", "firstName", "lastName", "email"]
+          attributes: ["id", "name", "email"]
         }
       ],
       order: [["createdAt", "DESC"]]
@@ -140,7 +140,7 @@ exports.getReviewById = async (req, res) => {
         },
         {
           model: Customer,
-          attributes: ["id", "firstName", "lastName", "email"]
+          attributes: ["id", "name", "email"]
         }
       ]
     });

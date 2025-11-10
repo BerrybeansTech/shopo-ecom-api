@@ -18,16 +18,17 @@ router.put('/update-customer', authenticateToken.authenticateToken, CustomerCont
 router.delete('/delete-customer/:id', authenticateToken.authenticateToken, CustomerController.deleteCustomers);
 router.get('/check-exists', CustomerController.checkUserExists);
 
-// Cart routes
+
 router.get('/cart', authenticateToken.authenticateToken, CartController.getCart);
 router.post('/cart', authenticateToken.authenticateToken, CartController.createCart);
 router.put('/cart', authenticateToken.authenticateToken, CartController.updateCart);
 router.delete('/cart', authenticateToken.authenticateToken, CartController.deleteCart);
 
-// Cart items routes
-router.get('/cart/items', authenticateToken.authenticateToken, CartItemsController.getCartItems);
-router.post('/cart/items', authenticateToken.authenticateToken, CartItemsController.addItem);
-router.put('/cart/items/:id', authenticateToken.authenticateToken, CartItemsController.updateItem);
-router.delete('/cart/items/:id', authenticateToken.authenticateToken, CartItemsController.removeItem);
+router.get('/cart/items', authenticateToken.authenticateToken, CartItemsController.getAllCartItems);
+router.get('/cart/items/:id', authenticateToken.authenticateToken, CartItemsController.getCartItemByCartId);
+router.post('/cart/items', authenticateToken.authenticateToken, CartItemsController.createCartItem);
+router.put('/cart/items/:id', authenticateToken.authenticateToken, CartItemsController.updateCartItem);
+router.delete('/cart/items/:id', authenticateToken.authenticateToken, CartItemsController.deleteCartItem);
+router.delete('/cart/clear/:id', authenticateToken.authenticateToken, CartItemsController.clearCartItem);
 
 module.exports = router;
