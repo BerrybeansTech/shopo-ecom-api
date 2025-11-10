@@ -1,130 +1,241 @@
-const Cart = require('../../models/customer/cart.model');
-const CartItem = require('../../models/customer/cartItems.model');
-const Product = require('../../models/product/product.model');
-const ProductColorVariation = require('../../models/product/product-colorVariation.model');
-const ProductSizeVariation = require('../../models/product/product-sizeVariation.model');
+
+const CartItems = require("../../models/customer/cartItems.model");
+const Cart = require("../../models/customer/cart.model");
+const Product = require("../../models/product/product.model");
 
 
-exports.getCartItems = async (req, res) => {
+exports.getAllCartItems = async (req, res) => {
   try {
-    const customerId = req.user.id;
+    const baseUrl = `${req.protocol}://${req.get("host")}/`;
 
-    const cart = await Cart.findOne({ where: { customerId, isActive: true } });
-    if (!cart) return res.status(404).json({ success: false, message: 'Cart not found' });
+    const page = parseInt(req.query.page) || 1;
+    const limit = parseInt(req.query.limit) || 10;
+    const offset = (page - 1) * limit;
 
-    const cartItems = await CartItem.findAll({
-      where: { cartId: cart.id },
+    const { count, rows } = await CartItems.findAndCountAll({
       include: [
-        { model: Product, as: 'Product', attributes: ['id', 'name', 'price', 'images'] },
-        { model: ProductColorVariation, as: 'ProductColorVariation', attributes: ['id', 'colorName'] },
-        { model: ProductSizeVariation, as: 'ProductSizeVariation', attributes: ['id', 'sizeName'] }
-      ]
+        {
+          model: Product,
+          as: "product",
+          attributes: ["id", "name", "sellingPrice", "description", "thumbnailImage"],
+        },
+      ],
+      limit,
+      offset,
+      order: [["createdAt", "DESC"]],
     });
 
-    res.status(200).json({ success: true, data: cartItems });
+    const updatedRows = rows.map((item) => {
+      const cartItem = item.toJSON();
+
+      if (cartItem.product && cartItem.product.thumbnailImage) {
+        cartItem.product.thumbnailImage =
+          cartItem.product.thumbnailImage.startsWith("http")
+            ? cartItem.product.thumbnailImage
+            : `${baseUrl}${cartItem.product.thumbnailImage}`;
+      }
+
+      return cartItem;
+    });
+
+    res.json({
+      success: true,
+      data: updatedRows,
+      pagination: {
+        total: count,
+        page,
+        limit,
+        totalPages: Math.ceil(count / limit),
+      },
+    });
   } catch (error) {
-    console.error('Get Cart Items Error:', error);
-    res.status(500).json({ success: false, message: error.message });
+    console.error("Error getting cart items:", error);
+    res.status(500).json({
+      success: false,
+      message: "Failed to retrieve cart items",
+    });
   }
 };
 
 
-exports.addItem = async (req, res) => {
+exports.getCartItemByCartId = async (req, res) => {
+  const { id } = req.params;
+
   try {
-    const customerId = req.user.id;
-    const { productId, productColorVariationId, productSizeVariationId, quantity } = req.body;
+    const baseUrl = `${req.protocol}://${req.get("host")}/`;
 
-    if (!productId || !productColorVariationId || !productSizeVariationId || !quantity) {
-      return res.status(400).json({ success: false, message: 'All fields are required' });
-    }
+    const cart = await Cart.findOne({ where: { customerId: id } });
 
-    let cart = await Cart.findOne({ where: { customerId, isActive: true } });
-    if (!cart) cart = await Cart.create({ customerId });
-
-    const existingItem = await CartItem.findOne({
-      where: { cartId: cart.id, productId, productColorVariationId, productSizeVariationId }
-    });
-
-    if (existingItem) {
-      existingItem.quantity += quantity;
-      await existingItem.save();
-      return res.status(200).json({
-        success: true,
-        message: 'Cart item updated successfully',
-        data: existingItem
+    if (!cart) {
+      return res.status(404).json({
+        success: false,
+        message: "Cart not found",
       });
     }
 
-    const cartItem = await CartItem.create({
+    const cartItems = await CartItems.findAll({
+      where: { cartId: cart.id },
+      include: [
+        {
+          model: Product,
+          as: "product",
+          attributes: [
+            "id",
+            "name",
+            "sellingPrice",
+            "description",
+            "galleryImage",
+            "thumbnailImage",
+          ],
+        },
+      ],
+      order: [["createdAt", "DESC"]],
+    });
+
+    const updatedCartItems = cartItems.map((cartItem) => {
+      const item = cartItem.toJSON();
+
+      if (item.product) {
+        item.product.thumbnailImage = `${baseUrl}${item.product.thumbnailImage}`;
+
+        item.product.galleryImage = Array.isArray(item.product.galleryImage)
+          ? item.product.galleryImage.map((img) =>
+              img.trim().startsWith("http")
+                ? img.trim()
+                : `${baseUrl}${img.trim()}`
+            )
+          : [];
+      }
+
+      return item;
+    });
+
+    res.json({ success: true, data: updatedCartItems });
+  } catch (error) {
+    console.error("Error getting cart item by ID:", error);
+    res.status(500).json({
+      success: false,
+      message: "Failed to retrieve cart item",
+    });
+  }
+};
+
+
+exports.createCartItem = async (req, res) => {
+  const { productId, productColorVariationId, productSizeVariationId, quantity } = req.body;
+  const customerId = req.user.id;
+
+  if (!productId || !productColorVariationId || !productSizeVariationId) {
+    return res.status(400).json({
+      success: false,
+      message: "productId, productColorVariationId, and productSizeVariationId are required"
+    });
+  }
+
+  try {
+    let cart = await Cart.findOne({ where: { customerId, isActive: true } });
+    if (!cart) {
+      cart = await Cart.create({ customerId });
+    }
+
+    const newItem = await CartItems.create({
       cartId: cart.id,
       productId,
       productColorVariationId,
       productSizeVariationId,
-      quantity
+      quantity: quantity || 1
     });
 
-    res.status(201).json({
+    res.json({
       success: true,
-      message: 'Item added to cart successfully',
-      data: cartItem
+      message: "Cart item added successfully",
+      data: newItem
     });
   } catch (error) {
-    console.error('Add Item Error:', error);
-    res.status(500).json({ success: false, message: error.message });
-  }
-};
-
-exports.updateItem = async (req, res) => {
-  try {
-    const customerId = req.user.id;
-    const { id } = req.params;
-    const { quantity } = req.body;
-
-    if (!quantity || quantity < 1)
-      return res.status(400).json({ success: false, message: 'Valid quantity is required' });
-
-    const cart = await Cart.findOne({ where: { customerId, isActive: true } });
-    if (!cart) return res.status(404).json({ success: false, message: 'Cart not found' });
-
-    const cartItem = await CartItem.findOne({ where: { id, cartId: cart.id } });
-    if (!cartItem)
-      return res.status(404).json({ success: false, message: 'Cart item not found' });
-
-    cartItem.quantity = quantity;
-    await cartItem.save();
-
-    res.status(200).json({
-      success: true,
-      message: 'Cart item updated successfully',
-      data: cartItem
+    console.error("Error creating cart item:", error);
+    res.status(500).json({
+      success: false,
+      message: "Failed to add item to cart",
+      error: error.message
     });
-  } catch (error) {
-    console.error('Update Item Error:', error);
-    res.status(500).json({ success: false, message: error.message });
   }
 };
 
 
-exports.removeItem = async (req, res) => {
+
+exports.clearCartItem = async (req, res) => {
+  const { id } = req.params;
   try {
-    const customerId = req.user.id;
-    const { id } = req.params;
+    const clearedCart = await CartItems.destroy({ where: { cartId: id } });
 
-    const cart = await Cart.findOne({ where: { customerId, isActive: true } });
-    if (!cart) return res.status(404).json({ success: false, message: 'Cart not found' });
-
-    const cartItem = await CartItem.findOne({ where: { id, cartId: cart.id } });
-    if (!cartItem)
-      return res.status(404).json({ success: false, message: 'Cart item not found' });
-
-    await cartItem.destroy();
-
-    res.status(200).json({
+    res.json({
       success: true,
-      message: 'Cart item removed successfully'
+      message: "Cart items deleted successfully",
+      data: clearedCart,
     });
   } catch (error) {
-    console.error('Remove Item Error:', error);
-    res.status(500).json({ success: false, message: error.message });
+    console.error("Error deleting cart items:", error);
+    res.status(500).json({
+      success: false,
+      message: "Failed to delete cart items",
+    });
+  }
+};
+
+
+exports.updateCartItem = async (req, res) => {
+  const { id } = req.params;
+  const { quantity } = req.body;
+
+  try {
+    const item = await CartItems.findByPk(id);
+
+    if (!item) {
+      return res
+        .status(404)
+        .json({ success: false, message: "Cart item not found" });
+    }
+
+    await CartItems.update({ quantity }, { where: { id } });
+
+    res.json({
+      success: true,
+      message: "Cart item updated successfully",
+    });
+  } catch (error) {
+    console.error("Error updating cart item:", error);
+    res.status(500).json({
+      success: false,
+      message: "Failed to update cart item",
+    });
+  }
+};
+
+
+exports.deleteCartItem = async (req, res) => {
+  const { id } = req.params;
+
+  try {
+    const item = await CartItems.findByPk(id);
+
+    if (!item) {
+      return res
+        .status(404)
+        .json({ success: false, message: "Cart item not found" });
+    }
+
+    await CartItems.destroy({ where: { id } });
+
+    res.json({
+      success: true,
+      message: "Cart item deleted successfully",
+      data: item,
+    });
+  } catch (error) {
+    console.error("Error deleting cart item:", error);
+    res.status(500).json({
+      success: false,
+      message: "Failed to delete cart item",
+    });
   }
 };

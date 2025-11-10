@@ -1,6 +1,7 @@
 const express = require("express");
 const router = express.Router();
 const upload = require('../config/multer.config')
+const authenticateToken = require('../middlewares/authenticateJWT')
 const {
   createColorVariation,
   getAllColorVariations,
@@ -19,6 +20,7 @@ const categoryController = require("../controllers/product/categorys.controller"
 const OccasionController = require("../controllers/product/Occasion.controller");
 const MaterialController = require("../controllers/product/material.controller");
 const ProductController = require("../controllers/product/product.controller");
+const ProductReviewController = require("../controllers/product/product-review.controller");
 const sizeChartController = require("../controllers/product/sizeChart.controller");
 
 
@@ -84,5 +86,13 @@ router.get("/size-chart/get-size-chart/:id", sizeChartController.getSizeChartByI
 router.post("/size-chart/create", sizeChartController.createSizeChart);
 router.put("/size-chart/update/:id", sizeChartController.updateSizeChart);
 router.delete("/size-chart/delete/:id", sizeChartController.deleteSizeChart);
+
+
+router.post("/review/create", authenticateToken.authenticateToken, ProductReviewController.createReview);
+router.get("/review/get-all", ProductReviewController.getAllReviews);
+router.get("/review/get-by-product/:productId", ProductReviewController.getReviewsByProduct);
+router.get("/review/get-review/:id", ProductReviewController.getReviewById);
+router.put("/review/update/:id", authenticateToken.authenticateToken, ProductReviewController.updateReview);
+router.delete("/review/delete/:id", authenticateToken.authenticateToken, ProductReviewController.deleteReview);
 
 module.exports = router;
