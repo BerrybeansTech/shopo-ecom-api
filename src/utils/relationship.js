@@ -211,6 +211,79 @@ CartItems.belongsTo(ProductColorVariation, {
   onUpdate: "CASCADE",
 });
 
+// orders
+Customer.hasMany(Orders, {
+  foreignKey: "customerId",
+  as: "Orders",
+  onDelete: "CASCADE",
+  onUpdate: "CASCADE",
+});
+
+Orders.belongsTo(Customer, {
+  foreignKey: "customerId",
+  as: "Customer",
+  onDelete: "CASCADE",
+  onUpdate: "CASCADE",
+});
+
+Orders.hasMany(OrderItems, {
+  foreignKey: "orderId",
+  as: "OrderItems",
+  onDelete: "CASCADE",
+  onUpdate: "CASCADE",
+});
+
+OrderItems.belongsTo(Orders, {
+  foreignKey: "orderId",
+  as: "Order",
+  onDelete: "CASCADE",
+  onUpdate: "CASCADE",
+});
+
+Product.hasMany(OrderItems, {
+  foreignKey: "productId",
+  as: "OrderItems",
+  onDelete: "SET NULL",
+  onUpdate: "CASCADE",
+});
+
+OrderItems.belongsTo(Product, {
+  foreignKey: "productId",
+  as: "Product",
+  onDelete: "SET NULL",
+  onUpdate: "CASCADE",
+});
+
+
+OrderItems.belongsTo(ProductColorVariation, {
+  foreignKey: "productColorId",
+  as: "ProductColor",
+  onDelete: "SET NULL",
+  onUpdate: "CASCADE",
+});
+
+ProductColorVariation.hasMany(OrderItems, {
+  foreignKey: "productId",
+  as: "OrderItems",
+  onDelete: "SET NULL",
+  onUpdate: "CASCADE",
+});
+
+OrderItems.belongsTo(ProductSizeVariation, {
+  foreignKey: "productSizeId",
+  as: "ProductSize",
+  onDelete: "SET NULL",
+  onUpdate: "CASCADE",
+});
+
+ProductSizeVariation.hasMany(OrderItems, {
+  foreignKey: "productSizeId",
+  as: "OrderItems",
+  onDelete: "SET NULL",
+  onUpdate: "CASCADE",
+});
+
+
 Product.hasMany(ProductReview, { foreignKey: 'productId', onDelete: 'CASCADE' });
 ProductReview.belongsTo(Product, { foreignKey: 'productId' });
 

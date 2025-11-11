@@ -5,7 +5,7 @@ const Customer = require("../../models/customer/customers.model");
 exports.createReview = async (req, res) => {
   try {
     const { productId, rating, comment } = req.body;
-    const customerId = req.user.id; // Assuming JWT middleware sets req.user
+    const customerId = req.user.id;
 
     if (!productId || !rating) {
       return res.status(400).json({

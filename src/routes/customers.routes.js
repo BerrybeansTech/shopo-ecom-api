@@ -19,16 +19,16 @@ router.delete('/delete-customer/:id', authenticateToken.authenticateToken, Custo
 router.get('/check-exists', CustomerController.checkUserExists);
 
 
-router.get('/cart', authenticateToken.authenticateToken, CartController.getCart);
-router.post('/cart', authenticateToken.authenticateToken, CartController.createCart);
-router.put('/cart', authenticateToken.authenticateToken, CartController.updateCart);
-router.delete('/cart', authenticateToken.authenticateToken, CartController.deleteCart);
+// router.get('/cart', authenticateToken.authenticateToken, CartController.getCart);
+// router.post('/cart', authenticateToken.authenticateToken, CartController.createCart);
+// router.put('/cart', authenticateToken.authenticateToken, CartController.updateCart);
+// router.delete('/cart', authenticateToken.authenticateToken, CartController.deleteCart);
 
-router.get('/cart/items', authenticateToken.authenticateToken, CartItemsController.getAllCartItems);
-router.get('/cart/items/:id', authenticateToken.authenticateToken, CartItemsController.getCartItemByCartId);
-router.post('/cart/items', authenticateToken.authenticateToken, CartItemsController.createCartItem);
-router.put('/cart/items/:id', authenticateToken.authenticateToken, CartItemsController.updateCartItem);
-router.delete('/cart/items/:id', authenticateToken.authenticateToken, CartItemsController.deleteCartItem);
-router.delete('/cart/clear/:id', authenticateToken.authenticateToken, CartItemsController.clearCartItem);
+router.get('/cart/get-all-items', authenticateToken.authenticateToken, CartItemsController.getAllCartItems);
+router.get('/cart/get-item/:id', authenticateToken.authenticateToken, CartItemsController.getCartItemByCartId);
+router.post('/cart/add-to-cart', authenticateToken.authenticateToken, CartItemsController.createCartItem);
+router.put('/cart/update-items/:id', authenticateToken.authenticateToken, CartItemsController.updateCartItem);
+router.delete('/cart/delete-items/:id', authenticateToken.authenticateToken, CartItemsController.deleteCartItem);
+router.delete('/cart/clear-cart/:id', authenticateToken.authenticateToken, CartItemsController.clearCartItem);
 
 module.exports = router;

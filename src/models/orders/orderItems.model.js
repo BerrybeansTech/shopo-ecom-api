@@ -1,6 +1,6 @@
 const { DataTypes } = require("sequelize");
 const sequelize = require("../../config/db");
-const Customer = require("../customer/customers.model");
+const Customer = require('../customer/customers.model');
 
 const OrderItems = sequelize.define(
   "OrderItems",
@@ -20,11 +20,11 @@ const OrderItems = sequelize.define(
     productName: {
       type: DataTypes.TEXT,
     },
-    productcolor: {
-      type: DataTypes.TEXT,
+    productColorId: {
+      type: DataTypes.INTEGER,
     },
-    size: {
-      type: DataTypes.TEXT,
+    productSizeId: {
+      type: DataTypes.INTEGER,
     },
     quantity: {
       type: DataTypes.INTEGER,

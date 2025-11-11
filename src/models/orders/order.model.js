@@ -5,6 +5,7 @@ const Customer = require('../customer/customers.model');
 const Orders = sequelize.define('Orders', {
   id: {
     type: DataTypes.UUID,
+    defaultValue: DataTypes.UUIDV4,
     primaryKey: true,
     defaultValue: DataTypes.UUIDV4,
   },
@@ -14,6 +15,10 @@ const Orders = sequelize.define('Orders', {
   },
   totalItems: {
     type: DataTypes.INTEGER,
+    allowNull: true,
+  },
+  shippingAddress: {
+    type: DataTypes.TEXT,
     allowNull: true,
   },
   subTotal: {

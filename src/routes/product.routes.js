@@ -49,7 +49,7 @@ router.put("/occasion/update/:id", OccasionController.updateOccasion);
 router.delete("/occasion/delete/:id", OccasionController.deleteOccasion);
 
 
-router.post("/category/category", upload.single("image"), categoryController.createCategory);
+router.post("/category/create", upload.single("image"), categoryController.createCategory);
 router.get("/category/get-all", categoryController.getAllCategories);
 router.get("/category/get-category/:id", categoryController.getCategoryById);
 router.put("/category/update/:id", upload.single("image"), categoryController.updateCategory);
