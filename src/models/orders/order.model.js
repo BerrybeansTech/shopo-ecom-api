@@ -1,12 +1,12 @@
 const { DataTypes } = require('sequelize');
 const sequelize = require('../../config/db');
-const Customer = require('./customers.model');
+const Customer = require('../customer/customers.model');
 
 const Orders = sequelize.define('Orders', {
   id: {
     type: DataTypes.UUID,
-    autoIncrement: true,
     primaryKey: true,
+    defaultValue: DataTypes.UUIDV4,
   },
   customerId: {
     type: DataTypes.UUID,
