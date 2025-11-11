@@ -273,7 +273,7 @@ const deleteOrder = async (req, res) => {
 
 module.exports = {
   getAllOrders,
-  getOrderDetail,
+  getOrderDetial,
   getCustomerOrder,
   createOrder,
   updateOrder,
