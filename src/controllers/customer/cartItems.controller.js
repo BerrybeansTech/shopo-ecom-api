@@ -1,8 +1,6 @@
-
 const CartItems = require("../../models/customer/cartItems.model");
 const Cart = require("../../models/customer/cart.model");
 const Product = require("../../models/product/product.model");
-
 
 exports.getAllCartItems = async (req, res) => {
   try {
@@ -17,7 +15,13 @@ exports.getAllCartItems = async (req, res) => {
         {
           model: Product,
           as: "product",
-          attributes: ["id", "name", "sellingPrice", "description", "thumbnailImage"],
+          attributes: [
+            "id",
+            "name",
+            "sellingPrice",
+            "description",
+            "thumbnailImage",
+          ],
         },
       ],
       limit,
@@ -56,7 +60,6 @@ exports.getAllCartItems = async (req, res) => {
     });
   }
 };
-
 
 exports.getCartItemByCartId = async (req, res) => {
   const { id } = req.params;
@@ -120,15 +123,20 @@ exports.getCartItemByCartId = async (req, res) => {
   }
 };
 
-
 exports.createCartItem = async (req, res) => {
-  const { productId, productColorVariationId, productSizeVariationId, quantity } = req.body;
+  const {
+    productId,
+    productColorVariationId,
+    productSizeVariationId,
+    quantity,
+  } = req.body;
   const customerId = req.user.id;
 
   if (!productId || !productColorVariationId || !productSizeVariationId) {
     return res.status(400).json({
       success: false,
-      message: "productId, productColorVariationId, and productSizeVariationId are required"
+      message:
+        "productId, productColorVariationId, and productSizeVariationId are required",
     });
   }
 
@@ -138,30 +146,45 @@ exports.createCartItem = async (req, res) => {
       cart = await Cart.create({ customerId });
     }
 
+    let existingCartItem = await CartItems.findOne({
+      where: {
+        cartID: cart.id,
+        productId,
+        productColorVariationId,
+        productSizeVariationId,
+      },
+    });
+
+    if (existingCartItem) {
+      return res.json({
+        success: false,
+        message: "item already exist",
+        data: existingCartItem,
+      });
+    }
+
     const newItem = await CartItems.create({
       cartId: cart.id,
       productId,
       productColorVariationId,
       productSizeVariationId,
-      quantity: quantity || 1
+      quantity: quantity || 1,
     });
 
     res.json({
       success: true,
       message: "Cart item added successfully",
-      data: newItem
+      data: newItem,
     });
   } catch (error) {
     console.error("Error creating cart item:", error);
     res.status(500).json({
       success: false,
       message: "Failed to add item to cart",
-      error: error.message
+      error: error.message,
     });
   }
 };
-
-
 
 exports.clearCartItem = async (req, res) => {
   const { id } = req.params;
@@ -181,7 +204,6 @@ exports.clearCartItem = async (req, res) => {
     });
   }
 };
-
 
 exports.updateCartItem = async (req, res) => {
   const { id } = req.params;
@@ -210,7 +232,6 @@ exports.updateCartItem = async (req, res) => {
     });
   }
 };
-
 
 exports.deleteCartItem = async (req, res) => {
   const { id } = req.params;

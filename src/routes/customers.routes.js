@@ -1,6 +1,5 @@
 const express = require('express');
 const CustomerController = require('../controllers/customer/customers.controller')
-const CartController = require('../controllers/customer/cart.controller')
 const CartItemsController = require('../controllers/customer/cartItems.controller')
 
 // const upload = require('../utils/multer')
@@ -18,11 +17,6 @@ router.put('/update-customer', authenticateToken.authenticateToken, CustomerCont
 router.delete('/delete-customer/:id', authenticateToken.authenticateToken, CustomerController.deleteCustomers);
 router.get('/check-exists', CustomerController.checkUserExists);
 
-
-// router.get('/cart', authenticateToken.authenticateToken, CartController.getCart);
-// router.post('/cart', authenticateToken.authenticateToken, CartController.createCart);
-// router.put('/cart', authenticateToken.authenticateToken, CartController.updateCart);
-// router.delete('/cart', authenticateToken.authenticateToken, CartController.deleteCart);
 
 router.get('/cart/get-all-items', authenticateToken.authenticateToken, CartItemsController.getAllCartItems);
 router.get('/cart/get-item/:id', authenticateToken.authenticateToken, CartItemsController.getCartItemByCartId);
