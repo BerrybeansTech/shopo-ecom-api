@@ -66,7 +66,7 @@ const getAllProduct = async (req, res) => {
           [
             literal(`(
         SELECT IFNULL(AVG(rating), 0)
-        FROM productreview AS pr
+        FROM productReview AS pr
         WHERE pr.productId = Product.id
       )`),
             "averageRating",
@@ -74,7 +74,7 @@ const getAllProduct = async (req, res) => {
           [
             literal(`(
         SELECT COUNT(*)
-        FROM productreview AS pr
+        FROM productReview AS pr
         WHERE pr.productId = Product.id
       )`),
             "reviewCount",

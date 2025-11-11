@@ -1,39 +1,21 @@
-const sequelize = require('../db'); 
+const sequelize = require("../../config/db");
 const Orders = require("../../models/orders/order.model");
-const Product = require("../../models/product/product.model")
-const OrderItems = require("../../models/orders/orderItems.model")
+const Product = require("../../models/product/product.model");
+const OrderItems = require("../../models/orders/orderItems.model");
+const Customer = require("../../models/customer/customers.model");
 
 const getAllOrders = async (req, res) => {
   try {
-    const { status, customerId, vendorId, page: pageQuery, limit: limitQuery } = req.query;
+    const {
+      status,
+      customerId,
+      page: pageQuery,
+      limit: limitQuery,
+    } = req.query;
 
     const page = parseInt(pageQuery) || 1;
     const limit = parseInt(limitQuery) || 10;
     const offset = (page - 1) * limit;
-
-    if (vendorId) {
-      const whereClause = {};
-      if (vendorId) whereClause.vendorId = vendorId;
-      if (status) whereClause.status = status;
-      if (customerId) whereClause.customerId = customerId;
-      const { count, rows } = await Orders.findAndCountAll({
-        where: { vendorId },
-        order: [["createdAt", "DESC"]], 
-        limit,
-        offset,
-      });
-
-      return res.json({
-        success: true,
-        data: rows,
-        pagination: {
-          total: count,
-          page,
-          limit,
-          totalPages: Math.ceil(count / limit),
-        },
-      });
-    }
 
     const whereClause = {};
     if (status) whereClause.status = status;
@@ -41,7 +23,23 @@ const getAllOrders = async (req, res) => {
 
     const { count, rows } = await Orders.findAndCountAll({
       where: whereClause,
-      order: [["createdAt", "DESC"]], 
+      include: [
+        {
+          model: Customer,
+          as: "Customer",
+        },
+        {
+          model: OrderItems,
+          as: "OrderItems",
+          include: [
+            {
+              model: Product,
+              as: "Product",
+            },
+          ],
+        },
+      ],
+      order: [["createdAt", "DESC"]],
       limit,
       offset,
     });
@@ -67,109 +65,179 @@ const getAllOrders = async (req, res) => {
 
 const getCustomerOrder = async (req, res) => {
   const { id } = req.params;
+  const { page: pageQuery, limit: limitQuery } = req.query;
 
   try {
-    const order = await Orders.findByPk(id);
+    const page = parseInt(pageQuery) || 1;
+    const limit = parseInt(limitQuery) || 10;
+    const offset = (page - 1) * limit;
 
-    if (!order) {
-      return res.status(404).json({ success: false, message: "Order not found" });
-    }
+    const { count, rows } = await Orders.findAndCountAll({
+      where: { customerId: id },
+      include: [
+        {
+          model: Customer,
+          as: "Customer",
+        },
+        {
+          model: OrderItems,
+          as: "OrderItems",
+          include: [
+            {
+              model: Product,
+              as: "Product",
+            },
+          ],
+        },
+      ],
+      order: [["createdAt", "DESC"]],
+      limit,
+      offset,
+    });
 
-    res.json({ success: true, data: order });
+    return res.json({
+      success: true,
+      data: rows,
+      pagination: {
+        total: count,
+        page,
+        limit,
+        totalPages: Math.ceil(count / limit),
+      },
+    });
   } catch (error) {
     console.error("Error fetching order:", error);
-    res.status(500).json({ success: false, message: "Failed to retrieve order" });
+    res
+      .status(500)
+      .json({ success: false, message: "Failed to retrieve order" });
   }
 };
+
 const getOrderDetial = async (req, res) => {
   const { id } = req.params;
 
   try {
-    const order = await Orders.findByPk(id);
+    const order = await Orders.findByPk(id, {
+      include: [
+        {
+          model: Customer,
+          as: "Customer",
+        },
+        {
+          model: OrderItems,
+          as: "OrderItems",
+          include: [
+            {
+              model: Product,
+              as: "Product",
+            },
+          ],
+        },
+      ],
+    });
 
     if (!order) {
-      return res.status(404).json({ success: false, message: "Order not found" });
+      return res
+        .status(404)
+        .json({ success: false, message: "Order not found" });
     }
 
     res.json({ success: true, data: order });
   } catch (error) {
     console.error("Error fetching order:", error);
-    res.status(500).json({ success: false, message: "Failed to retrieve order" });
+    res
+      .status(500)
+      .json({ success: false, message: "Failed to retrieve order" });
   }
 };
 
 const createOrder = async (req, res) => {
-  const { customerId, customerInfo, productInfo, subTotal, gstAmount, totalCost, status } = req.body;
+  const {
+    customerId,
+    totalItems,
+    shippingAddress,
+    subTotal,
+    tax,
+    shippingCharge,
+    totalAmount,
+    finalAmount,
+    paymentMethod,
+    orderNote,
+    productItems,
+  } = req.body;
 
-  const t = await sequelize.transaction(); 
+  const t = await sequelize.transaction();
 
   try {
-    const newOrder = await Orders.create({
-      customerId,
-      customerInfo,
-      productInfo,
-      subTotal,
-      gstAmount,
-      totalCost,
-      status,
-    }, { transaction: t });
+    const customer = await Customer.findByPk(customerId, { transaction: t });
+    if (!customer) {
+      await t.rollback();
+      return res
+        .status(404)
+        .json({ success: false, message: "Customer not found" });
+    }
 
-    await Promise.all(
-      productInfo.map(async (item) => {
-        const productId = item.productId;
-
-        const product = await Product.findByPk(productId, { transaction: t });
-
-        if (product) {
-          const currentTotal = parseInt(product.totalOrders || '0');
-          await Orders.create({
-            customerOrderId: newOrder.id,
-            customerId,
-            customerInfo,
-            vendorId: product.postedBy,
-            productInfo: item,
-            subTotal: item.subTotal,
-            gstAmount: item.gst,
-            totalCost: item.total,
-          }, { transaction: t })
-
-          await product.update(
-            { totalOrders: (currentTotal + 1).toString() },
-            { transaction: t }
-          );
-        }
-      })
+    const newOrder = await Orders.create(
+      {
+        customerId,
+        totalItems,
+        shippingAddress,
+        subTotal,
+        tax,
+        shippingCharge,
+        totalAmount,
+        finalAmount,
+        paymentMethod,
+        orderNote,
+        paymentStatus: "pending",
+        status: "pending",
+      },
+      { transaction: t }
     );
 
-    await t.commit(); 
+    if (
+      productItems &&
+      Array.isArray(productItems) &&
+      productItems.length > 0
+    ) {
+      const itemsToCreate = productItems.map((item) => ({
+        ...item,
+        orderId: newOrder.id,
+      }));
+      await OrderItems.bulkCreate(itemsToCreate, { transaction: t });
+    }
 
-    res.json({
+    await t.commit();
+
+    res.status(201).json({
       success: true,
       message: "Order created successfully",
       data: newOrder,
     });
   } catch (error) {
-    await t.rollback(); 
+    await t.rollback();
     console.error("Error creating order:", error);
-    res.status(500).json({ success: false, message: "Failed to create order" });
+    res.status(500).json({
+      success: false,
+      message: "Failed to create order",
+      error: error.message,
+    });
   }
 };
 
-
 const updateOrder = async (req, res) => {
-  const { id, remark, status } = req.body;
+  const { id, orderNote, status } = req.body;
 
   try {
     const order = await Orders.findByPk(id);
 
     if (!order) {
-      return res.status(404).json({ success: false, message: "Order not found" });
+      return res
+        .status(404)
+        .json({ success: false, message: "Order not found" });
     }
 
-    await Orders.update(
-      { remark, status },
-      { where: { id } }
-    );
+    await Orders.update({ orderNote, status }, { where: { id } });
 
     res.json({ success: true, message: "Order updated successfully" });
   } catch (error) {
@@ -185,7 +253,9 @@ const deleteOrder = async (req, res) => {
     const order = await Orders.findByPk(id);
 
     if (!order) {
-      return res.status(404).json({ success: false, message: "Order not found" });
+      return res
+        .status(404)
+        .json({ success: false, message: "Order not found" });
     }
 
     await Orders.destroy({ where: { id } });
