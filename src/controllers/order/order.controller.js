@@ -1,4 +1,4 @@
-const sequelize = require('../db'); 
+const sequelize = require('../../config/db');
 const Orders = require("../../models/orders/order.model");
 const Product = require("../../models/product/product.model")
 const OrderItems = require("../../models/orders/orderItems.model")
@@ -81,7 +81,7 @@ const getCustomerOrder = async (req, res) => {
     res.status(500).json({ success: false, message: "Failed to retrieve order" });
   }
 };
-const getOrderDetial = async (req, res) => {
+const getOrderDetail = async (req, res) => {
   const { id } = req.params;
 
   try {
@@ -122,15 +122,15 @@ const createOrder = async (req, res) => {
 
         if (product) {
           const currentTotal = parseInt(product.totalOrders || '0');
-          await Orders.create({
-            customerOrderId: newOrder.id,
-            customerId,
-            customerInfo,
-            vendorId: product.postedBy,
-            productInfo: item,
-            subTotal: item.subTotal,
-            gstAmount: item.gst,
-            totalCost: item.total,
+          await OrderItems.create({
+            orderId: newOrder.id,
+            productId,
+            productName: item.productName,
+            productcolor: item.color,
+            size: item.size,
+            quantity: item.quantity,
+            unitPrice: item.unitPrice,
+            totalPrice: item.total,
           }, { transaction: t })
 
           await product.update(
@@ -203,7 +203,7 @@ const deleteOrder = async (req, res) => {
 
 module.exports = {
   getAllOrders,
-  getOrderDetial,
+  getOrderDetail,
   getCustomerOrder,
   createOrder,
   updateOrder,
