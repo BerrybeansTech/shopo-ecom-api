@@ -1,4 +1,4 @@
-const sequelize = require("../../config/db");
+const sequelize = require('../../config/db');
 const Orders = require("../../models/orders/order.model");
 const Product = require("../../models/product/product.model");
 const OrderItems = require("../../models/orders/orderItems.model");
@@ -273,7 +273,7 @@ const deleteOrder = async (req, res) => {
 
 module.exports = {
   getAllOrders,
-  getOrderDetial,
+  getOrderDetail,
   getCustomerOrder,
   createOrder,
   updateOrder,

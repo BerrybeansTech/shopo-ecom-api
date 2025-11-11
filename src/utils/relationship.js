@@ -14,6 +14,7 @@ const Cart = require("../models/customer/cart.model");
 const CartItems = require("../models/customer/cartItems.model");
 const Orders = require("../models/orders/order.model");
 const OrderItems = require("../models/orders/orderItems.model");
+const Invoice = require("../models/orders/invoice.model");
 
 // ProductCategory → ProductSubCategory (One-to-Many)
 ProductCategory.hasMany(ProductSubCategory, {
@@ -289,6 +290,22 @@ ProductReview.belongsTo(Product, { foreignKey: 'productId' });
 Customer.hasMany(ProductReview, { foreignKey: 'customerId' });
 ProductReview.belongsTo(Customer, { foreignKey: 'customerId' });
 
+// Orders relationships
+Customer.hasMany(Orders, { foreignKey: 'customerId', onDelete: 'CASCADE' });
+Orders.belongsTo(Customer, { foreignKey: 'customerId', as: 'customer' });
+
+Orders.hasMany(OrderItems, { foreignKey: 'orderId', onDelete: 'CASCADE' });
+OrderItems.belongsTo(Orders, { foreignKey: 'orderId' });
+
+Product.hasMany(OrderItems, { foreignKey: 'productId', onDelete: 'CASCADE' });
+OrderItems.belongsTo(Product, { foreignKey: 'productId' });
+
+// Invoice relationships
+Orders.hasOne(Invoice, { foreignKey: 'orderId', onDelete: 'CASCADE' });
+Invoice.belongsTo(Orders, { foreignKey: 'orderId', as: 'order' });
+
+Customer.hasMany(Invoice, { foreignKey: 'customerId', onDelete: 'CASCADE' });
+Invoice.belongsTo(Customer, { foreignKey: 'customerId', as: 'customer' });
 
 module.exports = {
   Customer,
@@ -302,6 +319,9 @@ module.exports = {
   ProductColorVariation,
   ProductSizeVariation,
   ProductSizeChart,
+  Orders,
+  OrderItems,
+  Invoice,
 };
 
 // Category.hasMany(SubCategory, {
