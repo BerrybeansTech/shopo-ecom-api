@@ -22,7 +22,10 @@ const getAllCustomers = async (req, res) => {
       const result = await Customers.findAndCountAll({
         attributes: ["id", "name"],
       });
-      return res.json(result);
+      return res.json({
+        success: true,
+        data: result,
+      });
     }
 
     if (name) whereClause.name = { [Op.like]: `%${name}%` };
@@ -33,6 +36,13 @@ const getAllCustomers = async (req, res) => {
     const page = parseInt(req.query.page) || 1;
     const limit = parseInt(req.query.limit) || 10;
     const offset = (page - 1) * limit;
+
+    if (page < 1 || limit < 1 || limit > 100) {
+      return res.status(400).json({
+        success: false,
+        message: "Invalid pagination parameters. Page must be >=1, limit between 1 and 100.",
+      });
+    }
 
     const { count, rows } = await Customers.findAndCountAll({
       where: whereClause,
@@ -64,6 +74,13 @@ const getCustomersById = async (req, res) => {
   const { id } = req.params;
 
   try {
+    if (!id || isNaN(id)) {
+      return res.status(400).json({
+        success: false,
+        message: "Invalid customer ID provided.",
+      });
+    }
+
     const customer = await Customers.findOne({ where: { id } });
 
     if (!customer) {
@@ -98,11 +115,19 @@ const createCustomers = async (req, res) => {
       postalCode,
     } = req.body;
 
-    if (!password || password.trim() === "") {
+    // Basic input validation
+    if (!name || !email || !phone || !password || password.trim() === "") {
       await transaction.rollback();
       return res
         .status(400)
-        .json({ success: false, message: "Password is required" });
+        .json({ success: false, message: "Name, email, phone, and password are required" });
+    }
+
+    if (!otpToken) {
+      await transaction.rollback();
+      return res
+        .status(400)
+        .json({ success: false, message: "OTP token is required" });
     }
 
     const existingUser = await Customers.findOne({
@@ -212,10 +237,17 @@ const createCustomers = async (req, res) => {
       });
     }
 
+    if (error.name === "SequelizeValidationError") {
+      const messages = error.errors.map(err => err.message).join(', ');
+      return res.status(400).json({
+        success: false,
+        message: `Validation error: ${messages}`,
+      });
+    }
+
     return res.status(500).json({
       success: false,
       message: "Failed to create customer",
-      error: error.message,
     });
   }
 };
@@ -225,21 +257,30 @@ const customerLogin = async (req, res) => {
 
   try {
     if ((!email && !phone) || !password) {
-      return res.status(400).json({ message: "Missing credentials" });
+      return res.status(400).json({ 
+        success: false,
+        message: "Email or phone and password are required" 
+      });
     }
 
     // Find by email or phone
-    const user = await Customers.findOne({
-      where: email ? { email } : { phone },
-    });
+    const whereClause = email ? { email } : { phone };
+    const user = await Customers.findOne({ where: whereClause });
 
-    if (!user) return res.status(404).json({ message: "User not found" });
+    if (!user) {
+      return res.status(404).json({ 
+        success: false,
+        message: "User not found" 
+      });
+    }
 
     const isMatch = await bcrypt.compare(password, user.password);
-    if (!isMatch)
-      return res
-        .status(401)
-        .json({ message: "Invalid email/phone or password" });
+    if (!isMatch) {
+      return res.status(401).json({ 
+        success: false,
+        message: "Invalid email/phone or password" 
+      });
+    }
 
     const payload = {
       id: user.id,
@@ -266,7 +307,10 @@ const customerLogin = async (req, res) => {
     });
   } catch (err) {
     console.error("Login error:", err);
-    res.status(500).json({ success: false, message: "Internal server error" });
+    res.status(500).json({ 
+      success: false,
+      message: "Internal server error" 
+    });
   }
 };
 
@@ -279,6 +323,18 @@ const resetPassword = async (req, res) => {
       return res
         .status(400)
         .json({ success: false, message: "Email or phone number is required" });
+    }
+
+    if (!newPassword || newPassword.trim() === "") {
+      return res
+        .status(400)
+        .json({ success: false, message: "New password is required" });
+    }
+
+    if (!otpToken) {
+      return res
+        .status(400)
+        .json({ success: false, message: "OTP token is required" });
     }
 
     // Find user by email or phone
@@ -305,15 +361,25 @@ const resetPassword = async (req, res) => {
     });
 
     if (!validation.success) {
-      return res.status(403).json(validation);
+      return res.status(403).json({
+        success: false,
+        message: validation.message || "Invalid or expired OTP",
+      });
     }
 
     // Hash and update the new password
     const hashedPassword = await bcrypt.hash(newPassword, 10);
-    await Customers.update(
+    const [updatedRows] = await Customers.update(
       { password: hashedPassword },
       { where: whereClause }
     );
+
+    if (updatedRows === 0) {
+      return res.status(404).json({
+        success: false,
+        message: "Failed to update password. User not found.",
+      });
+    }
 
     res.json({
       success: true,
@@ -321,6 +387,13 @@ const resetPassword = async (req, res) => {
     });
   } catch (error) {
     console.error("Error in resetPassword:", error);
+    if (error.name === "SequelizeValidationError") {
+      const messages = error.errors.map(err => err.message).join(', ');
+      return res.status(400).json({
+        success: false,
+        message: `Validation error: ${messages}`,
+      });
+    }
     res.status(500).json({
       success: false,
       message: "Internal server error",
@@ -329,6 +402,7 @@ const resetPassword = async (req, res) => {
 };
 
 const updateCustomers = async (req, res) => {
+  const transaction = await sequelize.transaction();
   try {
     const {
       id,
@@ -343,21 +417,80 @@ const updateCustomers = async (req, res) => {
       postalCode,
     } = req.body;
 
-    const existing = await Customers.findByPk(id);
+    if (!id || isNaN(id)) {
+      await transaction.rollback();
+      return res.status(400).json({
+        success: false,
+        message: "Invalid customer ID provided.",
+      });
+    }
+
+    const existing = await Customers.findByPk(id, { transaction });
     if (!existing) {
+      await transaction.rollback();
       return res
         .status(404)
         .json({ success: false, message: "Customer not found" });
     }
 
+    // Check for unique fields if provided
+    if (email && email !== existing.email) {
+      const emailExists = await Customers.findOne({
+        where: { email },
+        transaction,
+      });
+      if (emailExists) {
+        await transaction.rollback();
+        return res.status(400).json({
+          success: false,
+          message: "Email already registered",
+        });
+      }
+    }
+
+    if (phone && phone !== existing.phone) {
+      const phoneExists = await Customers.findOne({
+        where: { phone },
+        transaction,
+      });
+      if (phoneExists) {
+        await transaction.rollback();
+        return res.status(400).json({
+          success: false,
+          message: "Phone number already registered",
+        });
+      }
+    }
+
     await Customers.update(
       { name, email, phone, address, city, state, country, status, postalCode },
-      { where: { id } }
+      { where: { id }, transaction }
     );
+
+    await transaction.commit();
 
     res.json({ success: true, message: "Customer updated successfully" });
   } catch (error) {
+    if (transaction) await transaction.rollback();
+
     console.error("Error updating customer:", error);
+
+    if (error.name === "SequelizeUniqueConstraintError") {
+      const field = error.errors[0]?.path;
+      return res.status(400).json({
+        success: false,
+        message: `This ${field} is already registered`,
+      });
+    }
+
+    if (error.name === "SequelizeValidationError") {
+      const messages = error.errors.map(err => err.message).join(', ');
+      return res.status(400).json({
+        success: false,
+        message: `Validation error: ${messages}`,
+      });
+    }
+
     res.status(500).json({
       success: false,
       message: "Failed to update customer",
@@ -367,23 +500,37 @@ const updateCustomers = async (req, res) => {
 
 const deleteCustomers = async (req, res) => {
   const { id } = req.params;
+  const transaction = await sequelize.transaction();
 
   try {
-    const customer = await Customers.findOne({ where: { id } });
+    if (!id || isNaN(id)) {
+      await transaction.rollback();
+      return res.status(400).json({
+        success: false,
+        message: "Invalid customer ID provided.",
+      });
+    }
+
+    const customer = await Customers.findOne({ where: { id }, transaction });
 
     if (!customer) {
+      await transaction.rollback();
       return res
         .status(404)
         .json({ success: false, message: "Customer not found" });
     }
 
-    await Customers.destroy({ where: { id } });
+    await Customers.destroy({ where: { id }, transaction });
+
+    await transaction.commit();
 
     res.json({
       success: true,
       message: "Customer deleted successfully",
     });
   } catch (error) {
+    if (transaction) await transaction.rollback();
+
     console.error("Error deleting customer:", error);
     res.status(500).json({
       success: false,
