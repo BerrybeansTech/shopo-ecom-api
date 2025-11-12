@@ -5,12 +5,12 @@ const invoiceController = require('../controllers/order/invoice.controller');
 const { authenticateToken } = require('../middlewares/authenticateJWT');
 
 // Order routes
-router.get('/orders', authenticateToken, orderController.getAllOrders);
-router.get('/orders/:id', authenticateToken, orderController.getOrderDetail);
-router.get('/customer-orders/:id', authenticateToken, orderController.getCustomerOrder);
-router.post('/orders', authenticateToken, orderController.createOrder);
-router.put('/orders/:id', authenticateToken, orderController.updateOrder);
-router.delete('/orders/:id', authenticateToken, orderController.deleteOrder);
+router.get('/get-all-orders', authenticateToken, orderController.getAllOrders);
+router.get('/get-order/:id', authenticateToken, orderController.getOrderDetial);
+router.get('/get-customer-order/:id', authenticateToken, orderController.getCustomerOrder);
+router.post('/create-order', authenticateToken, orderController.createOrder);
+router.put('/update-order', authenticateToken, orderController.updateOrder);
+
 
 // Invoice routes
 router.get('/invoices', authenticateToken, invoiceController.getAllInvoices);

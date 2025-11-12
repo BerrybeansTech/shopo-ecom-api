@@ -14,7 +14,7 @@ const otpRoutes = require("./routes/otp.routes.js");
 const adminUserRoutes = require("./routes/adminUsers.routes.js");
 const supportRoutes = require("./routes/support.routes.js");
 const productRoutes = require("./routes/product.routes.js");
-const orderRoutes = require("./routes/orders.routes.js");
+const orderRoutes = require("./routes/order.routes.js");
 const inventoryRoutes = require("./routes/inventory.routes");
 const app = express();
 
@@ -37,7 +37,6 @@ app.use("/otp", otpRoutes);
 app.use("/support", supportRoutes);
 app.use("/admin-user", adminUserRoutes);
 app.use("/product", productRoutes);
-app.use("/orders", orderRoutes);
 app.use("/inventory", inventoryRoutes);
 app.use("/order", orderRoutes);
 
