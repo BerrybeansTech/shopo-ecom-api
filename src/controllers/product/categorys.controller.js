@@ -2,26 +2,29 @@ const ProductCategory = require("../../models/product/product-category.model");
 const ProductSubCategory = require("../../models/product/product-subCategory.model");
 const ProductChildCategory = require("../../models/product/product-childCategory.model");
 
-
-
 exports.createCategory = async (req, res) => {
   try {
     const { name } = req.body;
-    if (!name) return res.status(400).json({ success: false, message: "Category name is required" });
+    if (!name || typeof name !== 'string' || !name.trim()) {
+      return res.status(400).json({ success: false, message: "Category name is required and must be a non-empty string" });
+    }
 
     let image = null;
     if (req.file) {
       image = `${process.env.FILE_PATH}${req.file.filename}`;
     }
 
-    const category = await ProductCategory.create({ name, image });
+    const category = await ProductCategory.create({ name: name.trim(), image });
     res.status(201).json({ success: true, message: "Category created successfully", data: category });
   } catch (error) {
     console.error("Create Category Error:", error);
-    res.status(500).json({ success: false, message: error.message });
+    // Handle Sequelize validation errors specifically
+    if (error.name === 'SequelizeValidationError') {
+      return res.status(400).json({ success: false, message: error.errors[0].message });
+    }
+    res.status(500).json({ success: false, message: "Internal server error occurred while creating category" });
   }
 };
-
 
 exports.getAllCategories = async (req, res) => {
   try {
@@ -38,13 +41,17 @@ exports.getAllCategories = async (req, res) => {
     res.status(200).json({ success: true, data: categories });
   } catch (error) {
     console.error("Get Categories Error:", error);
-    res.status(500).json({ success: false, message: error.message });
+    res.status(500).json({ success: false, message: "Internal server error occurred while fetching categories" });
   }
 };
 
 exports.getCategoryById = async (req, res) => {
   try {
     const { id } = req.params;
+    if (!/^\d+$/.test(id)) {
+      return res.status(400).json({ success: false, message: "Invalid category ID format" });
+    }
+
     const category = await ProductCategory.findByPk(id, {
       include: [
         {
@@ -54,11 +61,13 @@ exports.getCategoryById = async (req, res) => {
         },
       ],
     });
-    if (!category) return res.status(404).json({ success: false, message: "Category not found" });
+    if (!category) {
+      return res.status(404).json({ success: false, message: "Category not found" });
+    }
     res.status(200).json({ success: true, data: category });
   } catch (error) {
     console.error("Get Category By Id Error:", error);
-    res.status(500).json({ success: false, message: error.message });
+    res.status(500).json({ success: false, message: "Internal server error occurred while fetching category" });
   }
 };
 
@@ -67,10 +76,21 @@ exports.updateCategory = async (req, res) => {
     const { id } = req.params;
     const { name } = req.body;
 
-    const category = await ProductCategory.findByPk(id);
-    if (!category) return res.status(404).json({ success: false, message: "Category not found" });
+    if (!/^\d+$/.test(id)) {
+      return res.status(400).json({ success: false, message: "Invalid category ID format" });
+    }
 
-    category.name = name || category.name;
+    const category = await ProductCategory.findByPk(id);
+    if (!category) {
+      return res.status(404).json({ success: false, message: "Category not found" });
+    }
+
+    if (name !== undefined) {
+      if (typeof name !== 'string' || !name.trim()) {
+        return res.status(400).json({ success: false, message: "Category name must be a non-empty string if provided" });
+      }
+      category.name = name.trim();
+    }
 
     if (req.file) {
       category.image = `${process.env.FILE_PATH}${req.file.filename}`;
@@ -78,152 +98,258 @@ exports.updateCategory = async (req, res) => {
 
     await category.save();
 
-    res.status(200).json({ success: true, message: "Category updated successfully", data: category });
+    
+    const updatedCategory = await ProductCategory.findByPk(id, {
+      include: [
+        {
+          model: ProductSubCategory,
+          as: "ProductSubCategories",
+          include: [{ model: ProductChildCategory, as: "ProductChildCategories" }],
+        },
+      ],
+    });
+
+    res.status(200).json({ success: true, message: "Category updated successfully", data: updatedCategory });
   } catch (error) {
     console.error("Update Category Error:", error);
-    res.status(500).json({ success: false, message: error.message });
+    if (error.name === 'SequelizeValidationError') {
+      return res.status(400).json({ success: false, message: error.errors[0].message });
+    }
+    res.status(500).json({ success: false, message: "Internal server error occurred while updating category" });
   }
 };
-
 
 exports.deleteCategory = async (req, res) => {
   try {
     const { id } = req.params;
+    if (!/^\d+$/.test(id)) {
+      return res.status(400).json({ success: false, message: "Invalid category ID format" });
+    }
+
     const category = await ProductCategory.findByPk(id);
-    if (!category) return res.status(404).json({ success: false, message: "Category not found" });
+    if (!category) {
+      return res.status(404).json({ success: false, message: "Category not found" });
+    }
+
+ 
+    const subCategoryCount = await ProductSubCategory.count({ where: { categoryId: id } });
+    if (subCategoryCount > 0) {
+      return res.status(400).json({ success: false, message: "Cannot delete category with existing subcategories" });
+    }
 
     await category.destroy();
     res.status(200).json({ success: true, message: "Category deleted successfully" });
   } catch (error) {
     console.error("Delete Category Error:", error);
-    res.status(500).json({ success: false, message: error.message });
+    if (error.name === 'SequelizeForeignKeyConstraintError') {
+      return res.status(400).json({ success: false, message: "Cannot delete category due to related subcategories" });
+    }
+    res.status(500).json({ success: false, message: "Internal server error occurred while deleting category" });
   }
 };
-
-
 
 exports.createSubCategory = async (req, res) => {
   try {
     const { name, categoryId } = req.body;
-    if (!name || !categoryId)
-      return res.status(400).json({ success: false, message: "Name and categoryId are required" });
+    if (!name || typeof name !== 'string' || !name.trim()) {
+      return res.status(400).json({ success: false, message: "Subcategory name is required and must be a non-empty string" });
+    }
+    if (!categoryId || !/^\d+$/.test(categoryId)) {
+      return res.status(400).json({ success: false, message: "Valid categoryId is required" });
+    }
 
-    const subCategory = await ProductSubCategory.create({ name, categoryId });
+ 
+    const category = await ProductCategory.findByPk(categoryId);
+    if (!category) {
+      return res.status(404).json({ success: false, message: "Category not found for the provided categoryId" });
+    }
+
+    const subCategory = await ProductSubCategory.create({ name: name.trim(), categoryId });
     res.status(201).json({ success: true, message: "Subcategory created successfully", data: subCategory });
   } catch (error) {
     console.error("Create SubCategory Error:", error);
-    res.status(500).json({ success: false, message: error.message });
+    if (error.name === 'SequelizeValidationError') {
+      return res.status(400).json({ success: false, message: error.errors[0].message });
+    }
+    res.status(500).json({ success: false, message: "Internal server error occurred while creating subcategory" });
   }
 };
-
 
 exports.getAllSubCategories = async (req, res) => {
   try {
     const subCategories = await ProductSubCategory.findAll({
       include: [
-        { model: ProductCategory, attributes: ["id", "name"] },
+        { model: ProductCategory, as: "ProductCategory", attributes: ["id", "name"] },
         { model: ProductChildCategory, as: "ProductChildCategories" },
       ],
     });
     res.status(200).json({ success: true, data: subCategories });
   } catch (error) {
     console.error("Get SubCategories Error:", error);
-    res.status(500).json({ success: false, message: error.message });
+    res.status(500).json({ success: false, message: "Internal server error occurred while fetching subcategories" });
   }
 };
 
 exports.getSubCategoryById = async (req, res) => {
   try {
     const { id } = req.params;
+    if (!/^\d+$/.test(id)) {
+      return res.status(400).json({ success: false, message: "Invalid subcategory ID format" });
+    }
+
     const subCategory = await ProductSubCategory.findByPk(id, {
       include: [
-        { model: ProductCategory, attributes: ["id", "name"] },
+        { model: ProductCategory, as: "ProductCategory", attributes: ["id", "name"] },
         { model: ProductChildCategory, as: "ProductChildCategories" },
       ],
     });
-    if (!subCategory) return res.status(404).json({ success: false, message: "Subcategory not found" });
+    if (!subCategory) {
+      return res.status(404).json({ success: false, message: "Subcategory not found" });
+    }
     res.status(200).json({ success: true, data: subCategory });
   } catch (error) {
     console.error("Get SubCategory By Id Error:", error);
-    res.status(500).json({ success: false, message: error.message });
+    res.status(500).json({ success: false, message: "Internal server error occurred while fetching subcategory" });
   }
 };
-
 
 exports.updateSubCategory = async (req, res) => {
   try {
     const { id } = req.params;
     const { name, categoryId } = req.body;
 
-    const subCategory = await ProductSubCategory.findByPk(id);
-    if (!subCategory) return res.status(404).json({ success: false, message: "Subcategory not found" });
+    if (!/^\d+$/.test(id)) {
+      return res.status(400).json({ success: false, message: "Invalid subcategory ID format" });
+    }
 
-    subCategory.name = name || subCategory.name;
-    subCategory.categoryId = categoryId || subCategory.categoryId;
+    const subCategory = await ProductSubCategory.findByPk(id);
+    if (!subCategory) {
+      return res.status(404).json({ success: false, message: "Subcategory not found" });
+    }
+
+    if (name !== undefined) {
+      if (typeof name !== 'string' || !name.trim()) {
+        return res.status(400).json({ success: false, message: "Subcategory name must be a non-empty string if provided" });
+      }
+      subCategory.name = name.trim();
+    }
+
+    if (categoryId !== undefined) {
+      if (!/^\d+$/.test(categoryId)) {
+        return res.status(400).json({ success: false, message: "Valid categoryId is required if provided" });
+      }
+   
+      const category = await ProductCategory.findByPk(categoryId);
+      if (!category) {
+        return res.status(404).json({ success: false, message: "Category not found for the provided categoryId" });
+      }
+      subCategory.categoryId = categoryId;
+    }
+
     await subCategory.save();
 
-    res.status(200).json({ success: true, message: "Subcategory updated successfully", data: subCategory });
+    const updatedSubCategory = await ProductSubCategory.findByPk(id, {
+      include: [
+        { model: ProductCategory, as: "ProductCategory", attributes: ["id", "name"] },
+        { model: ProductChildCategory, as: "ProductChildCategories" },
+      ],
+    });
+
+    res.status(200).json({ success: true, message: "Subcategory updated successfully", data: updatedSubCategory });
   } catch (error) {
     console.error("Update SubCategory Error:", error);
-    res.status(500).json({ success: false, message: error.message });
+    if (error.name === 'SequelizeValidationError') {
+      return res.status(400).json({ success: false, message: error.errors[0].message });
+    }
+    res.status(500).json({ success: false, message: "Internal server error occurred while updating subcategory" });
   }
 };
-
 
 exports.deleteSubCategory = async (req, res) => {
   try {
     const { id } = req.params;
+    if (!/^\d+$/.test(id)) {
+      return res.status(400).json({ success: false, message: "Invalid subcategory ID format" });
+    }
+
     const subCategory = await ProductSubCategory.findByPk(id);
-    if (!subCategory) return res.status(404).json({ success: false, message: "Subcategory not found" });
+    if (!subCategory) {
+      return res.status(404).json({ success: false, message: "Subcategory not found" });
+    }
+
+   
+    const childCategoryCount = await ProductChildCategory.count({ where: { subCategoryId: id } });
+    if (childCategoryCount > 0) {
+      return res.status(400).json({ success: false, message: "Cannot delete subcategory with existing child categories" });
+    }
 
     await subCategory.destroy();
     res.status(200).json({ success: true, message: "Subcategory deleted successfully" });
   } catch (error) {
     console.error("Delete SubCategory Error:", error);
-    res.status(500).json({ success: false, message: error.message });
+    if (error.name === 'SequelizeForeignKeyConstraintError') {
+      return res.status(400).json({ success: false, message: "Cannot delete subcategory due to related child categories" });
+    }
+    res.status(500).json({ success: false, message: "Internal server error occurred while deleting subcategory" });
   }
 };
-
-
 
 exports.createChildCategory = async (req, res) => {
   try {
     const { name, subCategoryId } = req.body;
-    if (!name || !subCategoryId)
-      return res.status(400).json({ success: false, message: "Name and subCategoryId are required" });
+    if (!name || typeof name !== 'string' || !name.trim()) {
+      return res.status(400).json({ success: false, message: "Child category name is required and must be a non-empty string" });
+    }
+    if (!subCategoryId || !/^\d+$/.test(subCategoryId)) {
+      return res.status(400).json({ success: false, message: "Valid subCategoryId is required" });
+    }
 
-    const childCategory = await ProductChildCategory.create({ name, subCategoryId });
+
+    const subCategory = await ProductSubCategory.findByPk(subCategoryId);
+    if (!subCategory) {
+      return res.status(404).json({ success: false, message: "Subcategory not found for the provided subCategoryId" });
+    }
+
+    const childCategory = await ProductChildCategory.create({ name: name.trim(), subCategoryId });
     res.status(201).json({ success: true, message: "Child category created successfully", data: childCategory });
   } catch (error) {
     console.error("Create ChildCategory Error:", error);
-    res.status(500).json({ success: false, message: error.message });
+    if (error.name === 'SequelizeValidationError') {
+      return res.status(400).json({ success: false, message: error.errors[0].message });
+    }
+    res.status(500).json({ success: false, message: "Internal server error occurred while creating child category" });
   }
 };
-
 
 exports.getAllChildCategories = async (req, res) => {
   try {
     const childCategories = await ProductChildCategory.findAll({
-      include: [{ model: ProductSubCategory, attributes: ["id", "name"] }],
+      include: [{ model: ProductSubCategory, as: "ProductSubCategory", attributes: ["id", "name"] }],
     });
     res.status(200).json({ success: true, data: childCategories });
   } catch (error) {
     console.error("Get ChildCategories Error:", error);
-    res.status(500).json({ success: false, message: error.message });
+    res.status(500).json({ success: false, message: "Internal server error occurred while fetching child categories" });
   }
 };
 
 exports.getChildCategoryById = async (req, res) => {
   try {
     const { id } = req.params;
+    if (!/^\d+$/.test(id)) {
+      return res.status(400).json({ success: false, message: "Invalid child category ID format" });
+    }
+
     const childCategory = await ProductChildCategory.findByPk(id, {
-      include: [{ model: ProductSubCategory, attributes: ["id", "name"] }],
+      include: [{ model: ProductSubCategory, as: "ProductSubCategory", attributes: ["id", "name"] }],
     });
-    if (!childCategory) return res.status(404).json({ success: false, message: "Child category not found" });
+    if (!childCategory) {
+      return res.status(404).json({ success: false, message: "Child category not found" });
+    }
     res.status(200).json({ success: true, data: childCategory });
   } catch (error) {
     console.error("Get ChildCategory By Id Error:", error);
-    res.status(500).json({ success: false, message: error.message });
+    res.status(500).json({ success: false, message: "Internal server error occurred while fetching child category" });
   }
 };
 
@@ -232,31 +358,70 @@ exports.updateChildCategory = async (req, res) => {
     const { id } = req.params;
     const { name, subCategoryId } = req.body;
 
-    const childCategory = await ProductChildCategory.findByPk(id);
-    if (!childCategory) return res.status(404).json({ success: false, message: "Child category not found" });
+    if (!/^\d+$/.test(id)) {
+      return res.status(400).json({ success: false, message: "Invalid child category ID format" });
+    }
 
-    childCategory.name = name || childCategory.name;
-    childCategory.subCategoryId = subCategoryId || childCategory.subCategoryId;
+    const childCategory = await ProductChildCategory.findByPk(id);
+    if (!childCategory) {
+      return res.status(404).json({ success: false, message: "Child category not found" });
+    }
+
+    if (name !== undefined) {
+      if (typeof name !== 'string' || !name.trim()) {
+        return res.status(400).json({ success: false, message: "Child category name must be a non-empty string if provided" });
+      }
+      childCategory.name = name.trim();
+    }
+
+    if (subCategoryId !== undefined) {
+      if (!/^\d+$/.test(subCategoryId)) {
+        return res.status(400).json({ success: false, message: "Valid subCategoryId is required if provided" });
+      }
+      // Validate subcategory exists
+      const subCategory = await ProductSubCategory.findByPk(subCategoryId);
+      if (!subCategory) {
+        return res.status(404).json({ success: false, message: "Subcategory not found for the provided subCategoryId" });
+      }
+      childCategory.subCategoryId = subCategoryId;
+    }
+
     await childCategory.save();
 
-    res.status(200).json({ success: true, message: "Child category updated successfully", data: childCategory });
+    // Reload with associations
+    const updatedChildCategory = await ProductChildCategory.findByPk(id, {
+      include: [{ model: ProductSubCategory, as: "ProductSubCategory", attributes: ["id", "name"] }],
+    });
+
+    res.status(200).json({ success: true, message: "Child category updated successfully", data: updatedChildCategory });
   } catch (error) {
     console.error("Update ChildCategory Error:", error);
-    res.status(500).json({ success: false, message: error.message });
+    if (error.name === 'SequelizeValidationError') {
+      return res.status(400).json({ success: false, message: error.errors[0].message });
+    }
+    res.status(500).json({ success: false, message: "Internal server error occurred while updating child category" });
   }
 };
-
 
 exports.deleteChildCategory = async (req, res) => {
   try {
     const { id } = req.params;
+    if (!/^\d+$/.test(id)) {
+      return res.status(400).json({ success: false, message: "Invalid child category ID format" });
+    }
+
     const childCategory = await ProductChildCategory.findByPk(id);
-    if (!childCategory) return res.status(404).json({ success: false, message: "Child category not found" });
+    if (!childCategory) {
+      return res.status(404).json({ success: false, message: "Child category not found" });
+    }
 
     await childCategory.destroy();
     res.status(200).json({ success: true, message: "Child category deleted successfully" });
   } catch (error) {
     console.error("Delete ChildCategory Error:", error);
-    res.status(500).json({ success: false, message: error.message });
+    if (error.name === 'SequelizeForeignKeyConstraintError') {
+      return res.status(400).json({ success: false, message: "Cannot delete child category due to related records" });
+    }
+    res.status(500).json({ success: false, message: "Internal server error occurred while deleting child category" });
   }
 };

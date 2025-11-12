@@ -6,134 +6,117 @@ const path = require('path');
 const puppeteer = require('puppeteer');
 
 const getAllInvoices = async (req, res) => {
-  try {
-    const { customerId, page: pageQuery, limit: limitQuery } = req.query;
+  const { customerId, page: pageQuery, limit: limitQuery } = req.query;
 
-    const page = parseInt(pageQuery) || 1;
-    const limit = parseInt(limitQuery) || 10;
-    const offset = (page - 1) * limit;
+  const page = parseInt(pageQuery) || 1;
+  const limit = parseInt(limitQuery) || 10;
+  const offset = (page - 1) * limit;
 
-    const whereClause = {};
-    if (customerId) whereClause.customerId = customerId;
+  const whereClause = {};
+  if (customerId) whereClause.customerId = customerId;
 
-    const { count, rows } = await Invoice.findAndCountAll({
-      where: whereClause,
-      include: [
-        {
-          model: Orders,
-          as: 'order',
-          attributes: ['id', 'totalAmount', 'status', 'createdAt']
-        },
-        {
-          model: Customers,
-          as: 'customer',
-          attributes: ['id', 'name', 'email', 'phone']
-        }
-      ],
-      order: [["createdAt", "DESC"]],
-      limit,
-      offset,
-    });
-
-    return res.json({
-      success: true,
-      data: rows,
-      pagination: {
-        total: count,
-        page,
-        limit,
-        totalPages: Math.ceil(count / limit),
+  const { count, rows } = await Invoice.findAndCountAll({
+    where: whereClause,
+    include: [
+      {
+        model: Orders,
+        as: 'order',
+        attributes: ['id', 'totalAmount', 'status', 'createdAt']
       },
-    });
-  } catch (error) {
-    console.error("Error fetching invoices:", error);
-    res.status(500).json({
-      success: false,
-      message: "Failed to retrieve invoices",
-    });
-  }
+      {
+        model: Customers,
+        as: 'customer',
+        attributes: ['id', 'name', 'email', 'phone']
+      }
+    ],
+    order: [["createdAt", "DESC"]],
+    limit,
+    offset,
+  });
+
+  return res.json({
+    success: true,
+    data: rows,
+    pagination: {
+      total: count,
+      page,
+      limit,
+      totalPages: Math.ceil(count / limit),
+    },
+  });
 };
 
 const getInvoiceById = async (req, res) => {
   const { id } = req.params;
 
-  try {
-    const invoice = await Invoice.findByPk(id, {
-      include: [
-        {
-          model: Orders,
-          as: 'order',
-          attributes: ['id', 'totalAmount', 'status', 'createdAt', 'orderNote']
-        },
-        {
-          model: Customers,
-          as: 'customer',
-          attributes: ['id', 'name', 'email', 'phone', 'address', 'city', 'state', 'country', 'postalCode']
-        }
-      ]
-    });
+  const invoice = await Invoice.findByPk(id, {
+    include: [
+      {
+        model: Orders,
+        as: 'order',
+        attributes: ['id', 'totalAmount', 'status', 'createdAt', 'orderNote']
+      },
+      {
+        model: Customers,
+        as: 'customer',
+        attributes: ['id', 'name', 'email', 'phone', 'address', 'city', 'state', 'country', 'postalCode']
+      }
+    ]
+  });
 
-    if (!invoice) {
-      return res.status(404).json({ success: false, message: "Invoice not found" });
-    }
-
-    res.json({ success: true, data: invoice });
-  } catch (error) {
-    console.error("Error fetching invoice:", error);
-    res.status(500).json({ success: false, message: "Failed to retrieve invoice" });
+  if (!invoice) {
+    const error = new Error("Invoice not found");
+    error.status = 404;
+    throw error;
   }
+
+  res.json({ success: true, data: invoice });
 };
 
 const updateInvoice = async (req, res) => {
   const { id } = req.params;
   const { invoiceFile } = req.body;
 
-  try {
-    const invoice = await Invoice.findByPk(id);
+  const invoice = await Invoice.findByPk(id);
 
-    if (!invoice) {
-      return res.status(404).json({ success: false, message: "Invoice not found" });
-    }
-
-    await invoice.update({ invoiceFile });
-
-    res.json({ success: true, message: "Invoice updated successfully" });
-  } catch (error) {
-    console.error("Error updating invoice:", error);
-    res.status(500).json({ success: false, message: "Failed to update invoice" });
+  if (!invoice) {
+    const error = new Error("Invoice not found");
+    error.status = 404;
+    throw error;
   }
+
+  await invoice.update({ invoiceFile });
+
+  res.json({ success: true, message: "Invoice updated successfully" });
 };
 
 const deleteInvoice = async (req, res) => {
   const { id } = req.params;
 
-  try {
-    const invoice = await Invoice.findByPk(id);
+  const invoice = await Invoice.findByPk(id);
 
-    if (!invoice) {
-      return res.status(404).json({ success: false, message: "Invoice not found" });
-    }
-
-    // Delete the file from filesystem
-    if (invoice.invoiceFile) {
-      const invoicesDir = path.join(__dirname, '../../uploads/invoices');
-      const filePath = path.join(invoicesDir, invoice.invoiceFile);
-      
-      if (fs.existsSync(filePath)) {
-        fs.unlinkSync(filePath);
-      }
-    }
-
-    await invoice.destroy();
-
-    res.json({
-      success: true,
-      message: "Invoice deleted successfully",
-    });
-  } catch (error) {
-    console.error("Error deleting invoice:", error);
-    res.status(500).json({ success: false, message: "Failed to delete invoice" });
+  if (!invoice) {
+    const error = new Error("Invoice not found");
+    error.status = 404;
+    throw error;
   }
+
+  // Delete the file from filesystem
+  if (invoice.invoiceFile) {
+    const invoicesDir = path.join(__dirname, '../../uploads/invoices');
+    const filePath = path.join(invoicesDir, invoice.invoiceFile);
+
+    if (fs.existsSync(filePath)) {
+      fs.unlinkSync(filePath);
+    }
+  }
+
+  await invoice.destroy();
+
+  res.json({
+    success: true,
+    message: "Invoice deleted successfully",
+  });
 };
 
 const generateInvoiceHTML = (order, companyInfo) => {
