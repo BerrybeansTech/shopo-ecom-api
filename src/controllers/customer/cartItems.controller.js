@@ -3,7 +3,10 @@ const Cart = require("../../models/customer/cart.model");
 const Product = require("../../models/product/product.model");
 
 exports.getAllCartItems = async (req, res) => {
-  const baseUrl = `${req.protocol}://${req.get("host")}/`;
+  // const baseUrl = `${req.protocol}://${req.get("host")}/`;
+  
+    const host = req.get("host").split(":")[0];
+    const baseUrl = `${req.protocol}://${host}/`;
 
   const page = parseInt(req.query.page) || 1;
   const limit = parseInt(req.query.limit) || 10;
@@ -56,7 +59,10 @@ exports.getAllCartItems = async (req, res) => {
 exports.getCartItemByCartId = async (req, res) => {
   const { id } = req.params;
 
-  const baseUrl = `${req.protocol}://${req.get("host")}/`;
+  // const baseUrl = `${req.protocol}://${req.get("host")}/`;
+  
+    const host = req.get("host").split(":")[0];
+    const baseUrl = `${req.protocol}://${host}/`;
 
   const cart = await Cart.findOne({ where: { customerId: id } });
 
