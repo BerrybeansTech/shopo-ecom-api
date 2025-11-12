@@ -7,26 +7,33 @@ exports.createReview = async (req, res) => {
     const { productId, rating, comment } = req.body;
     const customerId = req.user.id;
 
-    if (!productId || !rating) {
+    if (!productId || !/^\d+$/.test(productId)) {
       return res.status(400).json({
         success: false,
-        message: "Product ID and rating are required"
+        message: "Valid productId is required"
+      });
+    }
+    if (!rating || typeof rating !== 'number' || rating < 1 || rating > 5) {
+      return res.status(400).json({
+        success: false,
+        message: "Rating must be a number between 1 and 5"
       });
     }
 
-    if (rating < 1 || rating > 5) {
-      return res.status(400).json({
-        success: false,
-        message: "Rating must be between 1 and 5"
-      });
-    }
-
-    // Check if product exists
+    
     const product = await Product.findByPk(productId);
     if (!product) {
       return res.status(404).json({
         success: false,
         message: "Product not found"
+      });
+    }
+
+    const customer = await Customer.findByPk(customerId);
+    if (!customer) {
+      return res.status(404).json({
+        success: false,
+        message: "Customer not found"
       });
     }
 
@@ -46,7 +53,7 @@ exports.createReview = async (req, res) => {
       productId,
       customerId,
       rating,
-      comment
+      comment: comment && typeof comment === 'string' ? comment.trim() : null
     });
 
     res.status(201).json({
@@ -56,9 +63,15 @@ exports.createReview = async (req, res) => {
     });
   } catch (error) {
     console.error("Create Review Error:", error);
+    if (error.name === 'SequelizeValidationError') {
+      return res.status(400).json({
+        success: false,
+        message: error.errors[0].message
+      });
+    }
     res.status(500).json({
       success: false,
-      message: error.message
+      message: "Internal server error occurred while creating review"
     });
   }
 };
@@ -87,7 +100,7 @@ exports.getAllReviews = async (req, res) => {
     console.error("Get All Reviews Error:", error);
     res.status(500).json({
       success: false,
-      message: error.message
+      message: "Internal server error occurred while fetching reviews"
     });
   }
 };
@@ -95,6 +108,21 @@ exports.getAllReviews = async (req, res) => {
 exports.getReviewsByProduct = async (req, res) => {
   try {
     const { productId } = req.params;
+
+    if (!/^\d+$/.test(productId)) {
+      return res.status(400).json({
+        success: false,
+        message: "Invalid product ID format"
+      });
+    }
+
+    const product = await Product.findByPk(productId);
+    if (!product) {
+      return res.status(404).json({
+        success: false,
+        message: "Product not found"
+      });
+    }
 
     const reviews = await ProductReview.findAll({
       where: { productId },
@@ -123,7 +151,7 @@ exports.getReviewsByProduct = async (req, res) => {
     console.error("Get Reviews By Product Error:", error);
     res.status(500).json({
       success: false,
-      message: error.message
+      message: "Internal server error occurred while fetching product reviews"
     });
   }
 };
@@ -131,6 +159,13 @@ exports.getReviewsByProduct = async (req, res) => {
 exports.getReviewById = async (req, res) => {
   try {
     const { id } = req.params;
+
+    if (!/^\d+$/.test(id)) {
+      return res.status(400).json({
+        success: false,
+        message: "Invalid review ID format"
+      });
+    }
 
     const review = await ProductReview.findByPk(id, {
       include: [
@@ -160,7 +195,7 @@ exports.getReviewById = async (req, res) => {
     console.error("Get Review By Id Error:", error);
     res.status(500).json({
       success: false,
-      message: error.message
+      message: "Internal server error occurred while fetching review"
     });
   }
 };
@@ -171,6 +206,13 @@ exports.updateReview = async (req, res) => {
     const { rating, comment } = req.body;
     const customerId = req.user.id;
 
+    if (!/^\d+$/.test(id)) {
+      return res.status(400).json({
+        success: false,
+        message: "Invalid review ID format"
+      });
+    }
+
     const review = await ProductReview.findByPk(id);
     if (!review) {
       return res.status(404).json({
@@ -179,7 +221,7 @@ exports.updateReview = async (req, res) => {
       });
     }
 
-    // Check if the review belongs to the authenticated customer
+  
     if (review.customerId !== customerId) {
       return res.status(403).json({
         success: false,
@@ -187,28 +229,58 @@ exports.updateReview = async (req, res) => {
       });
     }
 
-    if (rating && (rating < 1 || rating > 5)) {
-      return res.status(400).json({
-        success: false,
-        message: "Rating must be between 1 and 5"
-      });
+    if (rating !== undefined) {
+      if (typeof rating !== 'number' || rating < 1 || rating > 5) {
+        return res.status(400).json({
+          success: false,
+          message: "Rating must be a number between 1 and 5 if provided"
+        });
+      }
+      review.rating = rating;
     }
 
-    review.rating = rating || review.rating;
-    review.comment = comment !== undefined ? comment : review.comment;
+    if (comment !== undefined) {
+      if (typeof comment !== 'string') {
+        return res.status(400).json({
+          success: false,
+          message: "Comment must be a string if provided"
+        });
+      }
+      review.comment = comment.trim() || null;
+    }
 
     await review.save();
+
+
+    const updatedReview = await ProductReview.findByPk(id, {
+      include: [
+        {
+          model: Product,
+          attributes: ["id", "name", "thumbnailImage"]
+        },
+        {
+          model: Customer,
+          attributes: ["id", "name", "email"]
+        }
+      ]
+    });
 
     res.status(200).json({
       success: true,
       message: "Review updated successfully",
-      data: review
+      data: updatedReview
     });
   } catch (error) {
     console.error("Update Review Error:", error);
+    if (error.name === 'SequelizeValidationError') {
+      return res.status(400).json({
+        success: false,
+        message: error.errors[0].message
+      });
+    }
     res.status(500).json({
       success: false,
-      message: error.message
+      message: "Internal server error occurred while updating review"
     });
   }
 };
@@ -218,6 +290,13 @@ exports.deleteReview = async (req, res) => {
     const { id } = req.params;
     const customerId = req.user.id;
 
+    if (!/^\d+$/.test(id)) {
+      return res.status(400).json({
+        success: false,
+        message: "Invalid review ID format"
+      });
+    }
+
     const review = await ProductReview.findByPk(id);
     if (!review) {
       return res.status(404).json({
@@ -226,7 +305,6 @@ exports.deleteReview = async (req, res) => {
       });
     }
 
-    // Check if the review belongs to the authenticated customer
     if (review.customerId !== customerId) {
       return res.status(403).json({
         success: false,
@@ -242,9 +320,15 @@ exports.deleteReview = async (req, res) => {
     });
   } catch (error) {
     console.error("Delete Review Error:", error);
+    if (error.name === 'SequelizeForeignKeyConstraintError') {
+      return res.status(400).json({
+        success: false,
+        message: "Cannot delete review due to related records"
+      });
+    }
     res.status(500).json({
       success: false,
-      message: error.message
+      message: "Internal server error occurred while deleting review"
     });
   }
 };
