@@ -85,7 +85,9 @@ router.delete("/color/delete-color/:id", deleteColorVariation);
 
 router.get("/size-chart/get-all", sizeChartController.getAllSizeCharts);
 router.get("/size-chart/get-size-chart/:id", sizeChartController.getSizeChartById);
-router.post("/size-chart/create", sizeChartController.createSizeChart);
+router.post("/size-chart/create", upload.fields([
+    { name: "image", maxCount: 1 }, 
+  ]), sizeChartController.createSizeChart);
 router.put("/size-chart/update/:id", sizeChartController.updateSizeChart);
 router.delete("/size-chart/delete/:id", sizeChartController.deleteSizeChart);
 
