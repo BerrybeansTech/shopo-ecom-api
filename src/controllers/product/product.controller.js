@@ -446,6 +446,7 @@ const createProduct = async (req, res) => {
           (file) => `${process.env.FILE_PATH}${file.filename}`
         )
       : [];
+      
 
     let parsedApparelDetails = {};
     try {
