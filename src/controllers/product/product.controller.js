@@ -537,18 +537,17 @@ const updateProduct = async (req, res) => {
     id,
     name,
     description,
-    price,
-    remarks,
+    metaTitle,
+    metaDescription,
+    careInstructions,
+    categoryId,
     subCategoryId,
-    postedBy,
+    childCategoryId,
+    aparelDetials,
+    inventory,
+    mrp,
+    sellingPrice,
     gst,
-    hsnCode,
-    priceLable,
-    brandName,
-    benefits,
-    expiresOn,
-    additionalInformation,
-    status,
     oldGalleryImage = [],
   } = req.body;
 
@@ -618,20 +617,19 @@ const updateProduct = async (req, res) => {
       {
         name,
         description,
-        price: parseInt(price),
-        remarks,
-        subCategoryId: subCategoryId,
-        postedBy,
-        priceLable,
-        brandName,
+        metaTitle,
+        metaDescription,
+        careInstructions,
+        categoryId,
+        subCategoryId,
+        childCategoryId,
+        aparelDetials,
+        inventory,
+        mrp,
+        sellingPrice,
         gst,
-        hsnCode,
-        benefits,
-        expiresOn,
-        additionalInformation,
         thumbnailImage,
         galleryImage,
-        status,
       },
       { where: { id } }
     );
@@ -642,6 +640,34 @@ const updateProduct = async (req, res) => {
     res.status(500).json({
       success: false,
       message: "Failed to update Product",
+    });
+  }
+};
+
+const updateInventory = async (req, res) => {
+  let {
+    id,
+    productColorVariationId,
+    productSizeVariationId,
+    availableQuantity,
+  } = req.body;
+
+  try {
+    await ProductInventory.update(
+      {
+        productColorVariationId,
+        productSizeVariationId,
+        availableQuantity,
+      },
+      { where: { id } }
+    );
+
+    res.json({ success: true, message: "Inventory updated successfully" });
+  } catch (error) {
+    console.error("Error updating Inventory:", error);
+    res.status(500).json({
+      success: false,
+      message: "Failed to update Inventory",
     });
   }
 };
@@ -691,4 +717,5 @@ module.exports = {
   getProductCatagory,
   getProductSubCatagory,
   getAllCategoriesWithSubcategories,
+  updateInventory
 };

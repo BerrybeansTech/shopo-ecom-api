@@ -539,6 +539,66 @@ const deleteCustomers = async (req, res) => {
   }
 };
 
+const getUserWishlist =  async (req, res) => {
+  const { id } = req.params;
+
+  try {
+    const user = await Customers.findByPk(id);
+
+    if (!user) {
+      return res.status(201).json({ success: false, error: "User not found" });
+    }
+    console.log("Fetched users:", user);
+
+    res.status(200).json({
+      success: true,
+      wishList: user.wishList,
+    });
+  } catch (err) {
+    console.error("Error fetching users by type:", err);
+    res.status(500).json({ success: false, message: "Error fetching users" });
+  }
+}
+
+
+const updateWishlist = async (req, res) => {
+  const { userId, productId } = req.body;
+
+  if (!userId || !productId) {
+    return res
+      .status(400)
+      .json({ success: false, error: "userId and productId are required" });
+  }
+
+  try {
+    const user = await Customers.findByPk(userId);
+
+    if (!user) {
+      return res.status(404).json({ success: false, error: "User not found" });
+    }
+
+    const currentList = Array.isArray(user.wishList) ? user.wishList : [];
+
+    const updatedWishList = currentList.includes(productId)
+      ? currentList.filter((id) => id !== productId)
+      : [...currentList, productId];
+
+    user.wishList = updatedWishList;
+
+    await user.save();
+
+    res.json({
+      success: true,
+      message: "Wishlist updated successfully",
+      wishList: updatedWishList,
+    });
+  } catch (error) {
+    console.error("Error updating wishlist:", error);
+    res.status(500).json({ success: false, error: "Internal server error" });
+  }
+};
+
+
 const checkUserExists = async (req, res) => {
   try {
     const { email, phone } = req.query;
@@ -589,4 +649,6 @@ module.exports = {
   updateCustomers,
   deleteCustomers,
   checkUserExists,
+  getUserWishlist,
+  updateWishlist
 };

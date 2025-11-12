@@ -65,7 +65,11 @@ const Customers = sequelize.define('Customers', {
     type: DataTypes.STRING,
     allowNull: true,
   },
-
+  wishList: {
+    type: DataTypes.JSON,
+    allowNull: false,
+    defaultValue: [],
+  },
   remarks: {
     type: DataTypes.TEXT,
     allowNull: true,
