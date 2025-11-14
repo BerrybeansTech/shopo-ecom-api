@@ -10,6 +10,7 @@ const ProductColorVariation = require("../models/product/product-colorVariation.
 const ProductSizeVariation = require("../models/product/product-sizeVariation.model");
 const ProductSizeChart = require("../models/product/product-sizeChart.model");
 const ProductReview = require("../models/product/product-review");
+const ProductFitType = require("../models/product/product-fitType.model");
 const Cart = require("../models/customer/cart.model");
 const CartItems = require("../models/customer/cartItems.model");
 const Orders = require("../models/orders/order.model");
@@ -91,6 +92,20 @@ ProductMaterial.hasMany(Product, {
   foreignKey: "productMaterialId",
   as: "products",
 });
+
+
+// Product → ProductFitType
+Product.belongsTo(ProductFitType, {
+  foreignKey: "fitTypeId",
+  as: "fitType",
+  onDelete: "CASCADE",
+  onUpdate: "CASCADE",
+});
+ProductFitType.hasMany(Product, {
+  foreignKey: "fitTypeId",
+  as: "fitType",
+});
+
 
 // Product → ProductOccasion
 Product.belongsTo(ProductOccasion, {

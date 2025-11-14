@@ -28,8 +28,8 @@ const Product = sequelize.define('Product', {
   careInstructions: {
     type: DataTypes.TEXT,
   },
-  fitType: {
-    type: DataTypes.TEXT,
+  fitTypeId: {
+    type: DataTypes.INTEGER,
   },
   seasonal: {
     type: DataTypes.TEXT,
