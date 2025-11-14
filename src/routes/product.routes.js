@@ -19,6 +19,7 @@ const {
 const categoryController = require("../controllers/product/categorys.controller");
 const OccasionController = require("../controllers/product/Occasion.controller");
 const MaterialController = require("../controllers/product/material.controller");
+const fitTypeController = require("../controllers/product/fitType.controller");
 const ProductController = require("../controllers/product/product.controller");
 const ProductReviewController = require("../controllers/product/product-review.controller");
 const sizeChartController = require("../controllers/product/sizeChart.controller");
@@ -82,6 +83,12 @@ router.get("/color/get-all", getAllColorVariations);
 router.get("/color/get-color/:id", getColorVariationById);
 router.put("/color/update-color/:id", authenticateToken, updateColorVariation);
 router.delete("/color/delete-color/:id", authenticateToken, deleteColorVariation);
+
+router.get("/size-chart/get-all", sizeChartController.getAllSizeCharts);
+router.get("/size-chart/get-size-chart/:id", sizeChartController.getSizeChartById);
+router.post("/fit-type/create", authenticateToken, fitTypeController.createFitType);
+router.put("/fit-type/update/:id", authenticateToken, fitTypeController.updateFitType);
+router.delete("/fit-type/delete/:id", authenticateToken, fitTypeController.deleteFitType);
 
 router.get("/size-chart/get-all", sizeChartController.getAllSizeCharts);
 router.get("/size-chart/get-size-chart/:id", sizeChartController.getSizeChartById);
