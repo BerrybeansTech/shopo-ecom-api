@@ -11,8 +11,18 @@ exports.getAllCartItems = async (req, res) => {
     const limit = parseInt(req.query.limit) || 10;
     const offset = (page - 1) * limit;
 
+    // Get the authenticated user's ID
+    const customerId = req.user.id;
+
+    // Use a single query with proper joins to ensure cart isolation
     const { count, rows } = await CartItems.findAndCountAll({
       include: [
+        {
+          model: Cart,
+          as: "cart",
+          where: { customerId, isActive: true },
+          attributes: [], // Don't select cart fields
+        },
         {
           model: Product,
           as: "product",
@@ -64,19 +74,21 @@ exports.getAllCartItems = async (req, res) => {
 };
 
 exports.getCartItemByCartId = async (req, res) => {
-  const { id } = req.params;
+  // Use authenticated user's ID instead of params
+  const customerId = req.user.id;
 
   // const baseUrl = `${req.protocol}://${req.get("host")}/`;
-  
+
     const host = req.get("host").split(":")[0];
     const baseUrl = `${req.protocol}://${host}/`;
 
-  const cart = await Cart.findOne({ where: { customerId: id } });
+  const cart = await Cart.findOne({ where: { customerId, isActive: true } });
 
   if (!cart) {
-    const error = new Error("Cart not found");
-    error.status = 404;
-    throw error;
+    return res.status(200).json({
+      success: true,
+      data: [],
+    });
   }
 
   const cartItems = await CartItems.findAll({
