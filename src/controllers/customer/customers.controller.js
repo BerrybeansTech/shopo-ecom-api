@@ -540,40 +540,38 @@ const deleteCustomers = async (req, res) => {
 };
 
 const getUserWishlist =  async (req, res) => {
-  // Use authenticated user's ID instead of params
-  const customerId = req.user.id;
+  const { id } = req.params;
 
   try {
-    const user = await Customers.findByPk(customerId);
+    const user = await Customers.findByPk(id);
 
     if (!user) {
-      return res.status(404).json({ success: false, error: "User not found" });
+      return res.status(201).json({ success: false, error: "User not found" });
     }
+    console.log("Fetched users:", user);
 
     res.status(200).json({
       success: true,
       wishList: user.wishList,
     });
   } catch (err) {
-    console.error("Error fetching user wishlist:", err);
-    res.status(500).json({ success: false, message: "Error fetching wishlist" });
+    console.error("Error fetching users by type:", err);
+    res.status(500).json({ success: false, message: "Error fetching users" });
   }
 }
 
 
 const updateWishlist = async (req, res) => {
-  // Use authenticated user's ID instead of body param
-  const customerId = req.user.id;
-  const { productId } = req.body;
+  const { userId, productId } = req.body;
 
-  if (!productId) {
+  if (!userId || !productId) {
     return res
       .status(400)
-      .json({ success: false, error: "productId is required" });
+      .json({ success: false, error: "userId and productId are required" });
   }
 
   try {
-    const user = await Customers.findByPk(customerId);
+    const user = await Customers.findByPk(userId);
 
     if (!user) {
       return res.status(404).json({ success: false, error: "User not found" });
