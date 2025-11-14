@@ -417,7 +417,7 @@ const updateCustomers = async (req, res) => {
       postalCode,
     } = req.body;
 
-    if (!id || isNaN(id)) {
+    if (!id) {
       await transaction.rollback();
       return res.status(400).json({
         success: false,

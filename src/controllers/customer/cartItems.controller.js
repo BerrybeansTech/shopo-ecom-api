@@ -3,57 +3,64 @@ const Cart = require("../../models/customer/cart.model");
 const Product = require("../../models/product/product.model");
 
 exports.getAllCartItems = async (req, res) => {
-  // const baseUrl = `${req.protocol}://${req.get("host")}/`;
-  
+  try {
     const host = req.get("host").split(":")[0];
     const baseUrl = `${req.protocol}://${host}/`;
 
-  const page = parseInt(req.query.page) || 1;
-  const limit = parseInt(req.query.limit) || 10;
-  const offset = (page - 1) * limit;
+    const page = parseInt(req.query.page) || 1;
+    const limit = parseInt(req.query.limit) || 10;
+    const offset = (page - 1) * limit;
 
-  const { count, rows } = await CartItems.findAndCountAll({
-    include: [
-      {
-        model: Product,
-        as: "product",
-        attributes: [
-          "id",
-          "name",
-          "sellingPrice",
-          "description",
-          "thumbnailImage",
-        ],
-      },
-    ],
-    limit,
-    offset,
-    order: [["createdAt", "DESC"]],
-  });
-
-  const updatedRows = rows.map((item) => {
-    const cartItem = item.toJSON();
-
-    if (cartItem.product && cartItem.product.thumbnailImage) {
-      cartItem.product.thumbnailImage =
-        cartItem.product.thumbnailImage.startsWith("http")
-          ? cartItem.product.thumbnailImage
-          : `${baseUrl}${cartItem.product.thumbnailImage}`;
-    }
-
-    return cartItem;
-  });
-
-  res.json({
-    success: true,
-    data: updatedRows,
-    pagination: {
-      total: count,
-      page,
+    const { count, rows } = await CartItems.findAndCountAll({
+      include: [
+        {
+          model: Product,
+          as: "product",
+          attributes: [
+            "id",
+            "name",
+            "sellingPrice",
+            "description",
+            "thumbnailImage",
+          ],
+        },
+      ],
       limit,
-      totalPages: Math.ceil(count / limit),
-    },
-  });
+      offset,
+      order: [["createdAt", "DESC"]],
+    });
+
+    const updatedRows = rows.map((item) => {
+      const cartItem = item.toJSON();
+
+      if (cartItem.product && cartItem.product.thumbnailImage) {
+        cartItem.product.thumbnailImage =
+          cartItem.product.thumbnailImage.startsWith("http")
+            ? cartItem.product.thumbnailImage
+            : `${baseUrl}${cartItem.product.thumbnailImage}`;
+      }
+
+      return cartItem;
+    });
+
+    return res.status(200).json({
+      success: true,
+      data: updatedRows,
+      pagination: {
+        total: count,
+        page,
+        limit,
+        totalPages: Math.ceil(count / limit),
+      },
+    });
+  } catch (error) {
+    console.error("Error fetching cart items:", error);
+    return res.status(500).json({
+      success: false,
+      message: "Failed to fetch cart items.",
+      error: error.message,
+    });
+  }
 };
 
 exports.getCartItemByCartId = async (req, res) => {
@@ -113,56 +120,67 @@ exports.getCartItemByCartId = async (req, res) => {
 };
 
 exports.createCartItem = async (req, res) => {
-  const {
-    productId,
-    productColorVariationId,
-    productSizeVariationId,
-    quantity,
-  } = req.body;
-  const customerId = req.user.id;
-
-  if (!productId || !productColorVariationId || !productSizeVariationId) {
-    const error = new Error("productId, productColorVariationId, and productSizeVariationId are required");
-    error.status = 400;
-    throw error;
-  }
-
-  let cart = await Cart.findOne({ where: { customerId, isActive: true } });
-  if (!cart) {
-    cart = await Cart.create({ customerId });
-  }
-
-  let existingCartItem = await CartItems.findOne({
-    where: {
-      cartID: cart.id,
+  try {
+    const {
       productId,
       productColorVariationId,
       productSizeVariationId,
-    },
-  });
+      quantity,
+    } = req.body;
+    const customerId = req.user.id;
 
-  if (existingCartItem) {
-    return res.json({
+    if (!productId || !productColorVariationId || !productSizeVariationId) {
+      return res.status(400).json({
+        success: false,
+        message:
+          "productId, productColorVariationId, and productSizeVariationId are required",
+      });
+    }
+
+    let cart = await Cart.findOne({ where: { customerId, isActive: true } });
+    if (!cart) {
+      cart = await Cart.create({ customerId, isActive: true });
+    }
+
+    const existingCartItem = await CartItems.findOne({
+      where: {
+        cartId: cart.id, 
+        productId,
+        productColorVariationId,
+        productSizeVariationId,
+      },
+    });
+
+    if (existingCartItem) {
+      return res.status(200).json({
+        success: false,
+        message: "Item already exists in the cart",
+        data: existingCartItem,
+      });
+    }
+
+    const newItem = await CartItems.create({
+      cartId: cart.id,
+      productId,
+      productColorVariationId,
+      productSizeVariationId,
+      quantity: quantity || 1,
+    });
+
+    return res.status(201).json({
+      success: true,
+      message: "Cart item added successfully",
+      data: newItem,
+    });
+  } catch (error) {
+    console.error("Error creating cart item:", error);
+    return res.status(error.status || 500).json({
       success: false,
-      message: "item already exist",
-      data: existingCartItem,
+      message: error.message || "Failed to create cart item",
     });
   }
-
-  const newItem = await CartItems.create({
-    cartId: cart.id,
-    productId,
-    productColorVariationId,
-    productSizeVariationId,
-    quantity: quantity || 1,
-  });
-
-  res.json({
-    success: true,
-    message: "Cart item added successfully",
-    data: newItem,
-  });
 };
+
 
 exports.clearCartItem = async (req, res) => {
   const { id } = req.params;
