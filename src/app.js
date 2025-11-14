@@ -16,6 +16,7 @@ const supportRoutes = require("./routes/support.routes.js");
 const productRoutes = require("./routes/product.routes.js");
 const orderRoutes = require("./routes/order.routes.js");
 const inventoryRoutes = require("./routes/inventory.routes");
+const blogRoutes = require("./routes/blog.routes")
 const app = express();
 
 const corsOptions = {
@@ -39,6 +40,7 @@ app.use("/admin-user", adminUserRoutes);
 app.use("/product", productRoutes);
 app.use("/inventory", inventoryRoutes);
 app.use("/order", orderRoutes);
+app.use("/blog", blogRoutes);
 
 app.use(errorHandler);
 
