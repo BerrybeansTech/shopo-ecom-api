@@ -15,7 +15,7 @@ router.post('/login', CustomerController.customerLogin);
 router.post('/reset-password', CustomerController.resetPassword);
 router.put('/update-customer', authenticateToken.authenticateToken, CustomerController.updateCustomers);
 router.delete('/delete-customer/:id', authenticateToken.authenticateToken, CustomerController.deleteCustomers);
-router.get('/check-exists', authenticateToken.authenticateToken, CustomerController.checkUserExists);
+router.get('/check-exists', CustomerController.checkUserExists);
 
 
 router.get('/wishlist/:id', authenticateToken.authenticateToken, CustomerController.getUserWishlist);

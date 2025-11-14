@@ -15,7 +15,10 @@ const getAllSizeCharts = async (req, res) => {
       order: [["id", "ASC"]]
     });
 
-    const baseUrl = `${req.protocol}://${req.get("host")}/`;
+    // const baseUrl = `${req.protocol}://${req.get("host")}/`;
+    
+    const host = req.get("host").split(":")[0];
+    const baseUrl = `${req.protocol}://${host}/`;
 
     const updatedSizeCharts = sizeCharts.map((chart) => {
       const data = chart.toJSON();
@@ -71,7 +74,11 @@ const getSizeChartById = async (req, res) => {
       });
     }
 
-    const baseUrl = `${req.protocol}://${req.get("host")}/`;
+    // const baseUrl = `${req.protocol}://${req.get("host")}/`;
+    
+    const host = req.get("host").split(":")[0];
+    const baseUrl = `${req.protocol}://${host}/`;
+
     const data = sizeChart.toJSON();
     if (Array.isArray(data.image)) {
       data.image = data.image.map((imgPath) => `${baseUrl}${imgPath}`);
@@ -136,7 +143,11 @@ const createSizeChart = async (req, res) => {
     });
 
     
-    const baseUrl = `${req.protocol}://${req.get("host")}/`;
+    // const baseUrl = `${req.protocol}://${req.get("host")}/`;
+    
+    const host = req.get("host").split(":")[0];
+    const baseUrl = `${req.protocol}://${host}/`;
+
     const data = sizeChart.toJSON();
     if (Array.isArray(data.image)) {
       data.image = data.image.map((imgPath) => `${baseUrl}${imgPath}`);
@@ -264,7 +275,11 @@ const updateSizeChart = async (req, res) => {
       ]
     });
 
-    const baseUrl = `${req.protocol}://${req.get("host")}/`;
+    // const baseUrl = `${req.protocol}://${req.get("host")}/`;
+    
+    const host = req.get("host").split(":")[0];
+    const baseUrl = `${req.protocol}://${host}/`;
+    
     const data = updatedSizeChart.toJSON();
     if (Array.isArray(data.image)) {
       data.image = data.image.map((imgPath) => `${baseUrl}${imgPath}`);

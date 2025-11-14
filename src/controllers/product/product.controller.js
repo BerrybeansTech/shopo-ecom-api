@@ -31,7 +31,12 @@ const getAllProduct = async (req, res) => {
       newArrival,
     } = req.query;
 
-    const baseUrl = `${req.protocol}://${req.get("host")}/`;
+    const host = req.get("host").split(":")[0];
+    const baseUrl = `${req.protocol}://${host}/`;
+    // const baseUrl = `${req.protocol}://${req.get("host")}/`;
+
+    console.log("baseUrl",baseUrl);
+    
     const whereClause = {};
 
     if (name) whereClause.name = { [Op.like]: `%${name}%` };
@@ -268,7 +273,10 @@ const getProductById = async (req, res) => {
   const { id } = req.params;
 
   try {
-    const baseUrl = `${req.protocol}://${req.get("host")}/`;
+    // const baseUrl = `${req.protocol}://${req.get("host")}/`;
+    
+    const host = req.get("host").split(":")[0];
+    const baseUrl = `${req.protocol}://${host}/`;
 
     const product = await Product.findOne({
       where: { id },
@@ -438,6 +446,7 @@ const createProduct = async (req, res) => {
           (file) => `${process.env.FILE_PATH}${file.filename}`
         )
       : [];
+      
 
     let parsedApparelDetails = {};
     try {
