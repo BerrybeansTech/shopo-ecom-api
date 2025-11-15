@@ -149,9 +149,10 @@ const createOrder = async (req, res) => {
   const customer = await Customer.findByPk(customerId, { transaction: t });
   if (!customer) {
     await t.rollback();
-    const error = new Error("Customer not found");
-    error.status = 404;
-    throw error;
+    return res.status(404).json({
+      success: false,
+      message: "Customer not found"
+    });
   }
 
   const newOrder = await Orders.create(
@@ -177,6 +178,27 @@ const createOrder = async (req, res) => {
     Array.isArray(productItems) &&
     productItems.length > 0
   ) {
+    // Validate that all products exist
+    const productIds = productItems.map(item => item.productId).filter(id => id);
+    if (productIds.length > 0) {
+      const existingProducts = await Product.findAll({
+        where: { id: productIds },
+        attributes: ['id'],
+        transaction: t
+      });
+
+      const existingProductIds = existingProducts.map(p => p.id);
+      const invalidProductIds = productIds.filter(id => !existingProductIds.includes(id));
+
+      if (invalidProductIds.length > 0) {
+        await t.rollback();
+        return res.status(400).json({
+          success: false,
+          message: `Invalid product IDs: ${invalidProductIds.join(', ')}`
+        });
+      }
+    }
+
     const itemsToCreate = productItems.map((item) => ({
       ...item,
       orderId: newOrder.id,

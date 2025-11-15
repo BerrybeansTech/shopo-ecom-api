@@ -84,9 +84,9 @@ router.get("/color/get-color/:id", getColorVariationById);
 router.put("/color/update-color/:id", authenticateToken, updateColorVariation);
 router.delete("/color/delete-color/:id", authenticateToken, deleteColorVariation);
 
-router.get("/size-chart/get-all", sizeChartController.getAllSizeCharts);
-router.get("/size-chart/get-size-chart/:id", sizeChartController.getSizeChartById);
 router.post("/fit-type/create", authenticateToken, fitTypeController.createFitType);
+router.get("/fit-type/get-all", fitTypeController.getAllFitTypes);
+router.get("/fit-type/get-fit-type/:id", fitTypeController.getFitTypeById);
 router.put("/fit-type/update/:id", authenticateToken, fitTypeController.updateFitType);
 router.delete("/fit-type/delete/:id", authenticateToken, fitTypeController.deleteFitType);
 
