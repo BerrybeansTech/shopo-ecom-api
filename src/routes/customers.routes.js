@@ -20,6 +20,7 @@ router.get('/check-exists', CustomerController.checkUserExists);
 
 router.get('/wishlist/:id', authenticateToken.authenticateToken, CustomerController.getUserWishlist);
 router.post('/update-wishlist', authenticateToken.authenticateToken, CustomerController.updateWishlist);
+router.delete('/wishlist/clear/:id', authenticateToken.authenticateToken, CustomerController.clearWishlist);
 
 
 router.get('/cart/get-all-items', authenticateToken.authenticateToken, CartItemsController.getAllCartItems);
