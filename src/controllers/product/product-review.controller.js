@@ -1,6 +1,8 @@
 const ProductReview = require("../../models/product/product-review");
 const Product = require("../../models/product/product.model");
 const Customer = require("../../models/customer/customers.model");
+const path = require("path");
+const fs = require("fs");
 
 exports.createReview = async (req, res) => {
   try {
@@ -13,7 +15,9 @@ exports.createReview = async (req, res) => {
         message: "Valid productId is required"
       });
     }
-    if (!rating || typeof rating !== 'number' || rating < 1 || rating > 5) {
+
+    const parsedRating = parseInt(rating, 10);
+    if (!parsedRating || isNaN(parsedRating) || parsedRating < 1 || parsedRating > 5) {
       return res.status(400).json({
         success: false,
         message: "Rating must be a number between 1 and 5"
@@ -49,11 +53,18 @@ exports.createReview = async (req, res) => {
       });
     }
 
+    // Handle image uploads
+    let imagePaths = [];
+    if (req.files && req.files.length > 0) {
+      imagePaths = req.files.map(file => file.filename);
+    }
+
     const review = await ProductReview.create({
       productId,
       customerId,
-      rating,
-      comment: comment && typeof comment === 'string' ? comment.trim() : null
+      rating: parsedRating,
+      comment: comment && typeof comment === 'string' ? comment.trim() : null,
+      images: imagePaths
     });
 
     res.status(201).json({
@@ -78,7 +89,10 @@ exports.createReview = async (req, res) => {
 
 exports.getAllReviews = async (req, res) => {
   try {
+    const customerId = req.user.id; // Get the authenticated user's ID
+
     const reviews = await ProductReview.findAll({
+      where: { customerId }, // Filter reviews by the current user
       include: [
         {
           model: Product,
@@ -230,13 +244,14 @@ exports.updateReview = async (req, res) => {
     }
 
     if (rating !== undefined) {
-      if (typeof rating !== 'number' || rating < 1 || rating > 5) {
+      const parsedRating = parseInt(rating, 10);
+      if (!parsedRating || isNaN(parsedRating) || parsedRating < 1 || parsedRating > 5) {
         return res.status(400).json({
           success: false,
           message: "Rating must be a number between 1 and 5 if provided"
         });
       }
-      review.rating = rating;
+      review.rating = parsedRating;
     }
 
     if (comment !== undefined) {
@@ -247,6 +262,21 @@ exports.updateReview = async (req, res) => {
         });
       }
       review.comment = comment.trim() || null;
+    }
+
+    // Handle image updates
+    if (req.files && req.files.length > 0) {
+      // Delete old images if they exist
+      if (review.images && review.images.length > 0) {
+        review.images.forEach(image => {
+          const imagePath = path.join(__dirname, '../../../uploads', image);
+          if (fs.existsSync(imagePath)) {
+            fs.unlinkSync(imagePath);
+          }
+        });
+      }
+      // Set new images
+      review.images = req.files.map(file => file.filename);
     }
 
     await review.save();
@@ -309,6 +339,16 @@ exports.deleteReview = async (req, res) => {
       return res.status(403).json({
         success: false,
         message: "You can only delete your own reviews"
+      });
+    }
+
+    // Delete associated images
+    if (review.images && review.images.length > 0) {
+      review.images.forEach(image => {
+        const imagePath = path.join(__dirname, '../../../uploads', image);
+        if (fs.existsSync(imagePath)) {
+          fs.unlinkSync(imagePath);
+        }
       });
     }
 

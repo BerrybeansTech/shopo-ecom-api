@@ -179,10 +179,20 @@ exports.createCartItem = async (req, res) => {
     });
 
     if (existingCartItem) {
+      // If item exists, increase the quantity instead of rejecting
+      const newQuantity = existingCartItem.quantity + (quantity || 1);
+      await CartItems.update(
+        { quantity: newQuantity },
+        { where: { id: existingCartItem.id } }
+      );
+
+      // Fetch updated item
+      const updatedItem = await CartItems.findByPk(existingCartItem.id);
+
       return res.status(200).json({
-        success: false,
-        message: "Item already exists in the cart",
-        data: existingCartItem,
+        success: true,
+        message: "Cart item quantity updated successfully",
+        data: updatedItem,
       });
     }
 
