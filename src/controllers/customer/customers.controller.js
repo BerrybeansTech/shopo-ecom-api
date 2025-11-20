@@ -598,6 +598,38 @@ const updateWishlist = async (req, res) => {
   }
 };
 
+const clearWishlist = async (req, res) => {
+  const { id } = req.params;
+
+  try {
+    if (!id) {
+      return res.status(400).json({
+        success: false,
+        message: "Invalid user ID provided.",
+      });
+    }
+
+    const user = await Customers.findByPk(id);
+
+    if (!user) {
+      return res.status(404).json({ success: false, message: "User not found" });
+    }
+
+    user.wishList = [];
+
+    await user.save();
+
+    res.json({
+      success: true,
+      message: "Wishlist cleared successfully",
+      wishList: [],
+    });
+  } catch (error) {
+    console.error("Error clearing wishlist:", error);
+    res.status(500).json({ success: false, message: "Internal server error" });
+  }
+};
+
 
 const checkUserExists = async (req, res) => {
   try {
@@ -650,5 +682,6 @@ module.exports = {
   deleteCustomers,
   checkUserExists,
   getUserWishlist,
-  updateWishlist
+  updateWishlist,
+  clearWishlist
 };

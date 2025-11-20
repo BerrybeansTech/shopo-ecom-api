@@ -7,7 +7,7 @@ const express = require('express');
 const app = require("./app.js");
 const db = require("./config/db.js");
 
-const PORT = process.env.PORT || 3000;
+const PORT = process.env.PORT || 4000;
 
   app.use(express.urlencoded({extended: true}));
   app.use(express.json());
@@ -19,7 +19,7 @@ async function startServer() {
     await db.authenticate();
     console.log("DB connected");
 
-    await db.sync({ alter: false });
+    await db.sync({ alter:false });
     console.log("Models synced");
 
     app.listen(PORT, () => {

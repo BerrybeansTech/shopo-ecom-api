@@ -23,6 +23,11 @@ const ProductReview = sequelize.define('productReview', {
   comment: {
     type: DataTypes.TEXT,
     allowNull: true
+  },
+  images: {
+    type: DataTypes.JSON,
+    allowNull: true,
+    defaultValue: []
   }
 }, {
   tableName: 'productReview',

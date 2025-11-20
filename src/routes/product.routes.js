@@ -1,7 +1,11 @@
+// routes/product.routes.js
+
 const express = require("express");
 const router = express.Router();
-const upload = require('../config/multer.config')
-const { authenticateToken } = require('../middlewares/authenticateJWT')
+const upload = require('../config/multer.config');
+const { authenticateToken } = require('../middlewares/authenticateJWT');
+
+// Controllers
 const {
   createColorVariation,
   getAllColorVariations,
@@ -9,6 +13,7 @@ const {
   updateColorVariation,
   deleteColorVariation
 } = require("../controllers/product/colorVariation.controller");
+
 const {
   createSizeVariation,
   getAllSizeVariations,
@@ -16,6 +21,7 @@ const {
   updateSizeVariation,
   deleteSizeVariation
 } = require("../controllers/product/sizeVariation.controller");
+
 const categoryController = require("../controllers/product/categorys.controller");
 const OccasionController = require("../controllers/product/Occasion.controller");
 const MaterialController = require("../controllers/product/material.controller");
@@ -28,15 +34,17 @@ const sizeChartController = require("../controllers/product/sizeChart.controller
 router.get("/get-all-product", ProductController.getAllProduct);
 router.get("/get-product/:id", ProductController.getProductById);
 router.post('/create-product', authenticateToken, upload.fields([
-    { name: "thumbnailImage", maxCount: 1 },
-    { name: "galleryImage", maxCount: 10 }, 
-  ]), ProductController.createProduct);
-router.put('/update-product', authenticateToken , upload.fields([
-    { name: "thumbnailImage", maxCount: 1 },
-    { name: "galleryImage", maxCount: 10 }, 
-  ]),  ProductController.updateProduct);
+  { name: "thumbnailImage", maxCount: 1 },
+  { name: "galleryImage", maxCount: 10 },
+]), ProductController.createProduct);
+
+router.put('/update-product', authenticateToken, upload.fields([
+  { name: "thumbnailImage", maxCount: 1 },
+  { name: "galleryImage", maxCount: 10 },
+]), ProductController.updateProduct);
 
 router.put("/inventory/update", authenticateToken, ProductController.updateInventory);
+
 
 router.post("/material/create", authenticateToken, MaterialController.createMaterial);
 router.get("/material/get-all", MaterialController.getAllMaterials);
@@ -52,19 +60,24 @@ router.put("/occasion/update/:id", authenticateToken, OccasionController.updateO
 router.delete("/occasion/delete/:id", authenticateToken, OccasionController.deleteOccasion);
 
 
+router.post("/fit-type/create", authenticateToken, fitTypeController.createFitType);
+router.get("/fit-type/get-all", fitTypeController.getAllFitTypes);
+router.get("/fit-type/get-fit-type/:id", fitTypeController.getFitTypeById);
+router.put("/fit-type/update/:id", authenticateToken, fitTypeController.updateFitType);
+router.delete("/fit-type/delete/:id", authenticateToken, fitTypeController.deleteFitType);
+
+
 router.post("/category/create", authenticateToken, upload.single("image"), categoryController.createCategory);
 router.get("/category/get-all", categoryController.getAllCategories);
 router.get("/category/get-category/:id", categoryController.getCategoryById);
 router.put("/category/update/:id", authenticateToken, upload.single("image"), categoryController.updateCategory);
 router.delete("/category/delete/:id", authenticateToken, categoryController.deleteCategory);
 
-
 router.post("/subcategory/create", authenticateToken, categoryController.createSubCategory);
 router.get("/subcategory/get-all", categoryController.getAllSubCategories);
 router.get("/subcategory/get-subcategory/:id", categoryController.getSubCategoryById);
 router.put("/subcategory/update/:id", authenticateToken, categoryController.updateSubCategory);
 router.delete("/subcategory/delete/:id", authenticateToken, categoryController.deleteSubCategory);
-
 
 router.post("/childcategory/create", authenticateToken, categoryController.createChildCategory);
 router.get("/childcategory/get-all", categoryController.getAllChildCategories);
@@ -86,24 +99,18 @@ router.delete("/color/delete-color/:id", authenticateToken, deleteColorVariation
 
 router.get("/size-chart/get-all", sizeChartController.getAllSizeCharts);
 router.get("/size-chart/get-size-chart/:id", sizeChartController.getSizeChartById);
-router.post("/fit-type/create", authenticateToken, fitTypeController.createFitType);
-router.put("/fit-type/update/:id", authenticateToken, fitTypeController.updateFitType);
-router.delete("/fit-type/delete/:id", authenticateToken, fitTypeController.deleteFitType);
-
-router.get("/size-chart/get-all", sizeChartController.getAllSizeCharts);
-router.get("/size-chart/get-size-chart/:id", sizeChartController.getSizeChartById);
 router.post("/size-chart/create", authenticateToken, upload.fields([
-    { name: "image", maxCount: 1 }, 
-  ]), sizeChartController.createSizeChart);
+  { name: "image", maxCount: 1 },
+]), sizeChartController.createSizeChart);
 router.put("/size-chart/update/:id", authenticateToken, sizeChartController.updateSizeChart);
 router.delete("/size-chart/delete/:id", authenticateToken, sizeChartController.deleteSizeChart);
 
 
-router.post("/review/create", authenticateToken, ProductReviewController.createReview);
-router.get("/review/get-all", ProductReviewController.getAllReviews);
+router.post("/review/create", authenticateToken, upload.array("images", 10), ProductReviewController.createReview);
+router.get("/review/get-all", authenticateToken, ProductReviewController.getAllReviews);
 router.get("/review/get-by-product/:productId", ProductReviewController.getReviewsByProduct);
 router.get("/review/get-review/:id", ProductReviewController.getReviewById);
-router.put("/review/update/:id", authenticateToken, ProductReviewController.updateReview);
+router.put("/review/update/:id", authenticateToken, upload.array("images", 10), ProductReviewController.updateReview);
 router.delete("/review/delete/:id", authenticateToken, ProductReviewController.deleteReview);
 
 module.exports = router;

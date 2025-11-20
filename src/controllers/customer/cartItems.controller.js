@@ -11,8 +11,16 @@ exports.getAllCartItems = async (req, res) => {
     const limit = parseInt(req.query.limit) || 10;
     const offset = (page - 1) * limit;
 
+    const customerId = req.user.id;
+
     const { count, rows } = await CartItems.findAndCountAll({
       include: [
+        {
+          model: Cart,
+          as: "cart",
+          where: { customerId, isActive: true }, 
+          attributes: [], 
+        },
         {
           model: Product,
           as: "product",
@@ -64,59 +72,71 @@ exports.getAllCartItems = async (req, res) => {
 };
 
 exports.getCartItemByCartId = async (req, res) => {
-  const { id } = req.params;
+  try {
+    
+    const customerId = req.user.id;
 
-  // const baseUrl = `${req.protocol}://${req.get("host")}/`;
-  
     const host = req.get("host").split(":")[0];
     const baseUrl = `${req.protocol}://${host}/`;
 
-  const cart = await Cart.findOne({ where: { customerId: id } });
+   
+    const cart = await Cart.findOne({ 
+      where: { customerId, isActive: true } 
+    });
 
-  if (!cart) {
-    const error = new Error("Cart not found");
-    error.status = 404;
-    throw error;
-  }
-
-  const cartItems = await CartItems.findAll({
-    where: { cartId: cart.id },
-    include: [
-      {
-        model: Product,
-        as: "product",
-        attributes: [
-          "id",
-          "name",
-          "sellingPrice",
-          "description",
-          "galleryImage",
-          "thumbnailImage",
-        ],
-      },
-    ],
-    order: [["createdAt", "DESC"]],
-  });
-
-  const updatedCartItems = cartItems.map((cartItem) => {
-    const item = cartItem.toJSON();
-
-    if (item.product) {
-      item.product.thumbnailImage = `${baseUrl}${item.product.thumbnailImage}`;
-
-      item.product.galleryImage = Array.isArray(item.product.galleryImage)
-        ? item.product.galleryImage.map((img) =>
-            img.trim().startsWith("http")
-              ? img.trim()
-              : `${baseUrl}${img.trim()}`
-          )
-        : [];
+    if (!cart) {
+      return res.status(200).json({
+        success: true,
+        data: [],
+      });
     }
 
-    return item;
-  });
+    const cartItems = await CartItems.findAll({
+      where: { cartId: cart.id },
+      include: [
+        {
+          model: Product,
+          as: "product",
+          attributes: [
+            "id",
+            "name",
+            "sellingPrice",
+            "description",
+            "galleryImage",
+            "thumbnailImage",
+          ],
+        },
+      ],
+      order: [["createdAt", "DESC"]],
+    });
 
-  res.json({ success: true, data: updatedCartItems });
+    const updatedCartItems = cartItems.map((cartItem) => {
+      const item = cartItem.toJSON();
+
+      if (item.product) {
+        item.product.thumbnailImage = `${baseUrl}${item.product.thumbnailImage}`;
+
+        item.product.galleryImage = Array.isArray(item.product.galleryImage)
+          ? item.product.galleryImage.map((img) =>
+              img.trim().startsWith("http")
+                ? img.trim()
+                : `${baseUrl}${img.trim()}`
+            )
+          : [];
+      }
+
+      return item;
+    });
+
+    res.json({ success: true, data: updatedCartItems });
+  } catch (error) {
+    console.error("Error fetching cart items:", error);
+    return res.status(500).json({
+      success: false,
+      message: "Failed to fetch cart items.",
+      error: error.message,
+    });
+  }
 };
 
 exports.createCartItem = async (req, res) => {
@@ -127,6 +147,8 @@ exports.createCartItem = async (req, res) => {
       productSizeVariationId,
       quantity,
     } = req.body;
+    
+    // FIXED: Always get customerId from authenticated token
     const customerId = req.user.id;
 
     if (!productId || !productColorVariationId || !productSizeVariationId) {
@@ -137,14 +159,19 @@ exports.createCartItem = async (req, res) => {
       });
     }
 
-    let cart = await Cart.findOne({ where: { customerId, isActive: true } });
+    // FIXED: Find or create cart for THIS specific user
+    let cart = await Cart.findOne({ 
+      where: { customerId, isActive: true } 
+    });
+    
     if (!cart) {
       cart = await Cart.create({ customerId, isActive: true });
     }
 
+    // FIXED: Check if item already exists in THIS user's cart
     const existingCartItem = await CartItems.findOne({
       where: {
-        cartId: cart.id, 
+        cartId: cart.id, // ✅ This ensures we check only this user's cart
         productId,
         productColorVariationId,
         productSizeVariationId,
@@ -152,10 +179,20 @@ exports.createCartItem = async (req, res) => {
     });
 
     if (existingCartItem) {
+      // If item exists, increase the quantity instead of rejecting
+      const newQuantity = existingCartItem.quantity + (quantity || 1);
+      await CartItems.update(
+        { quantity: newQuantity },
+        { where: { id: existingCartItem.id } }
+      );
+
+      // Fetch updated item
+      const updatedItem = await CartItems.findByPk(existingCartItem.id);
+
       return res.status(200).json({
-        success: false,
-        message: "Item already exists in the cart",
-        data: existingCartItem,
+        success: true,
+        message: "Cart item quantity updated successfully",
+        data: updatedItem,
       });
     }
 
@@ -181,54 +218,114 @@ exports.createCartItem = async (req, res) => {
   }
 };
 
-
 exports.clearCartItem = async (req, res) => {
-  const { id } = req.params;
-  const clearedCart = await CartItems.destroy({ where: { cartId: id } });
+  try {
+    // FIXED: Verify the cart belongs to the authenticated user
+    const customerId = req.user.id;
+    const { id } = req.params;
 
-  res.json({
-    success: true,
-    message: "Cart items deleted successfully",
-    data: clearedCart,
-  });
+    const cart = await Cart.findOne({
+      where: { id, customerId, isActive: true }
+    });
+
+    if (!cart) {
+      return res.status(404).json({
+        success: false,
+        message: "Cart not found or unauthorized",
+      });
+    }
+
+    const clearedCart = await CartItems.destroy({ where: { cartId: id } });
+
+    res.json({
+      success: true,
+      message: "Cart items deleted successfully",
+      data: clearedCart,
+    });
+  } catch (error) {
+    console.error("Error clearing cart:", error);
+    return res.status(500).json({
+      success: false,
+      message: "Failed to clear cart items.",
+      error: error.message,
+    });
+  }
 };
 
 exports.updateCartItem = async (req, res) => {
-  const { id } = req.params;
-  const { quantity } = req.body;
+  try {
+    const { id } = req.params;
+    const { quantity } = req.body;
+    const customerId = req.user.id;
 
-  const item = await CartItems.findByPk(id);
+    // FIXED: Verify the cart item belongs to the authenticated user
+    const item = await CartItems.findOne({
+      where: { id },
+      include: [{
+        model: Cart,
+        as: "cart",
+        where: { customerId, isActive: true }
+      }]
+    });
 
-  if (!item) {
-    const error = new Error("Cart item not found");
-    error.status = 404;
-    throw error;
+    if (!item) {
+      return res.status(404).json({
+        success: false,
+        message: "Cart item not found or unauthorized",
+      });
+    }
+
+    await CartItems.update({ quantity }, { where: { id } });
+
+    res.json({
+      success: true,
+      message: "Cart item updated successfully",
+    });
+  } catch (error) {
+    console.error("Error updating cart item:", error);
+    return res.status(500).json({
+      success: false,
+      message: "Failed to update cart item.",
+      error: error.message,
+    });
   }
-
-  await CartItems.update({ quantity }, { where: { id } });
-
-  res.json({
-    success: true,
-    message: "Cart item updated successfully",
-  });
 };
 
 exports.deleteCartItem = async (req, res) => {
-  const { id } = req.params;
+  try {
+    const { id } = req.params;
+    const customerId = req.user.id;
 
-  const item = await CartItems.findByPk(id);
+    // FIXED: Verify the cart item belongs to the authenticated user
+    const item = await CartItems.findOne({
+      where: { id },
+      include: [{
+        model: Cart,
+        as: "cart",
+        where: { customerId, isActive: true }
+      }]
+    });
 
-  if (!item) {
-    const error = new Error("Cart item not found");
-    error.status = 404;
-    throw error;
+    if (!item) {
+      return res.status(404).json({
+        success: false,
+        message: "Cart item not found or unauthorized",
+      });
+    }
+
+    await CartItems.destroy({ where: { id } });
+
+    res.json({
+      success: true,
+      message: "Cart item deleted successfully",
+      data: item,
+    });
+  } catch (error) {
+    console.error("Error deleting cart item:", error);
+    return res.status(500).json({
+      success: false,
+      message: "Failed to delete cart item.",
+      error: error.message,
+    });
   }
-
-  await CartItems.destroy({ where: { id } });
-
-  res.json({
-    success: true,
-    message: "Cart item deleted successfully",
-    data: item,
-  });
 };

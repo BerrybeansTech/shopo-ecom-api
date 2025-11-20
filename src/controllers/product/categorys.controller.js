@@ -2,6 +2,41 @@ const ProductCategory = require("../../models/product/product-category.model");
 const ProductSubCategory = require("../../models/product/product-subCategory.model");
 const ProductChildCategory = require("../../models/product/product-childCategory.model");
 
+const ensureTrailingSlash = (value) => {
+  if (!value) return "";
+  return value.endsWith("/") ? value : `${value}/`;
+};
+
+const buildBaseUrl = (req) => {
+  if (process.env.FILE_BASE_URL) {
+    return ensureTrailingSlash(process.env.FILE_BASE_URL.trim());
+  }
+  const host = req.get("host");
+  if (!host) return "";
+  const protocol = req.protocol || "http";
+  return ensureTrailingSlash(`${protocol}://${host}`);
+};
+
+const buildFileUrl = (req, filePath) => {
+  if (!filePath) return null;
+  if (/^https?:\/\//i.test(filePath)) {
+    return filePath;
+  }
+  const baseUrl = buildBaseUrl(req);
+  if (!baseUrl) {
+    return filePath;
+  }
+  const normalizedPath = filePath.replace(/^\/+/, "");
+  return `${baseUrl}${normalizedPath}`;
+};
+
+const formatCategoryResponse = (category, req) => {
+  if (!category) return null;
+  const data = category.toJSON ? category.toJSON() : { ...category };
+  data.image = buildFileUrl(req, data.image);
+  return data;
+};
+
 exports.createCategory = async (req, res) => {
   try {
     const { name } = req.body;
@@ -15,7 +50,8 @@ exports.createCategory = async (req, res) => {
     }
 
     const category = await ProductCategory.create({ name: name.trim(), image });
-    res.status(201).json({ success: true, message: "Category created successfully", data: category });
+    const formattedCategory = formatCategoryResponse(category, req);
+    res.status(201).json({ success: true, message: "Category created successfully", data: formattedCategory });
   } catch (error) {
     console.error("Create Category Error:", error);
     // Handle Sequelize validation errors specifically
@@ -38,7 +74,10 @@ exports.getAllCategories = async (req, res) => {
       ],
       order: [["id", "ASC"]],
     });
-    res.status(200).json({ success: true, data: categories });
+    const formattedCategories = categories.map((category) =>
+      formatCategoryResponse(category, req)
+    );
+    res.status(200).json({ success: true, data: formattedCategories });
   } catch (error) {
     console.error("Get Categories Error:", error);
     res.status(500).json({ success: false, message: "Internal server error occurred while fetching categories" });
@@ -64,7 +103,8 @@ exports.getCategoryById = async (req, res) => {
     if (!category) {
       return res.status(404).json({ success: false, message: "Category not found" });
     }
-    res.status(200).json({ success: true, data: category });
+    const formattedCategory = formatCategoryResponse(category, req);
+    res.status(200).json({ success: true, data: formattedCategory });
   } catch (error) {
     console.error("Get Category By Id Error:", error);
     res.status(500).json({ success: false, message: "Internal server error occurred while fetching category" });
@@ -109,7 +149,8 @@ exports.updateCategory = async (req, res) => {
       ],
     });
 
-    res.status(200).json({ success: true, message: "Category updated successfully", data: updatedCategory });
+    const formattedCategory = formatCategoryResponse(updatedCategory, req);
+    res.status(200).json({ success: true, message: "Category updated successfully", data: formattedCategory });
   } catch (error) {
     console.error("Update Category Error:", error);
     if (error.name === 'SequelizeValidationError') {
