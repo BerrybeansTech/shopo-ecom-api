@@ -19,30 +19,56 @@ const getAllProduct = async (req, res) => {
   try {
     const {
       name,
+      seasonal,
       category,
       subCategory,
       childCategory,
       productColor,
       productSize,
+      productMaterial,
+      fitType,
       occasion,
       status,
       minPrice,
       maxPrice,
       newArrival,
+      sort = "createdAt",
+      sortingOrder = "DESC"
     } = req.query;
 
     const host = req.get("host").split(":")[0];
     const baseUrl = `${req.protocol}://${host}/`;
     // const baseUrl = `${req.protocol}://${req.get("host")}/`;
 
-    console.log("baseUrl",baseUrl);
-    
+    console.log("baseUrl", baseUrl);
+
     const whereClause = {};
 
     if (name) whereClause.name = { [Op.like]: `%${name}%` };
+    if (seasonal) whereClause.seasonal = { [Op.like]: `%${seasonal}%` };
     if (status) whereClause.status = status;
-    if (occasion) whereClause.occasionId = occasion;
-    if (category) whereClause.categoryId = category;
+    if (fitType) {
+      const fitTypeArray = fitType.split(",").map((id) => Number(id.trim()));
+      whereClause.fitTypeId = { [Op.in]: fitTypeArray };
+    }
+    if (occasion) {
+      const occasionArray = occasion.split(",").map((id) => Number(id.trim()));
+      whereClause.occasionId = { [Op.in]: occasionArray };
+    }
+
+    if (productMaterial) {
+      const productMaterialArray = productMaterial
+        .split(",")
+        .map((id) => Number(id.trim()));
+
+      whereClause.productMaterialId = { [Op.in]: productMaterialArray };
+    }
+    if (category) {
+      const categoryArray = category.split(",").map((id) => Number(id.trim()));
+
+      whereClause.categoryId = { [Op.in]: categoryArray };
+    }
+
     if (subCategory) whereClause.subCategoryId = subCategory;
     if (childCategory) whereClause.childCategoryId = childCategory;
 
@@ -138,7 +164,7 @@ const getAllProduct = async (req, res) => {
       ],
       // group: ["Product.id"],
       subQuery: false,
-      order: [["createdAt", "DESC"]],
+      order: [[sort, sortingOrder]],
     };
 
     if (newArrival) {
@@ -274,7 +300,7 @@ const getProductById = async (req, res) => {
 
   try {
     // const baseUrl = `${req.protocol}://${req.get("host")}/`;
-    
+
     const host = req.get("host").split(":")[0];
     const baseUrl = `${req.protocol}://${host}/`;
 
@@ -446,7 +472,6 @@ const createProduct = async (req, res) => {
           (file) => `${process.env.FILE_PATH}${file.filename}`
         )
       : [];
-      
 
     let parsedApparelDetails = {};
     try {
@@ -726,5 +751,5 @@ module.exports = {
   getProductCatagory,
   getProductSubCatagory,
   getAllCategoriesWithSubcategories,
-  updateInventory
+  updateInventory,
 };
