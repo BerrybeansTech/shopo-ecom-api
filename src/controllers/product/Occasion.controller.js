@@ -20,13 +20,41 @@ exports.createOccasion = async (req, res) => {
 
 exports.getAllOccasions = async (req, res) => {
   try {
-    const occasions = await ProductOccasion.findAll({
-      order: [["id", "DESC"]],
+    const { name, page = 1, limit = 10, sortBy = "newest" } = req.query;
+
+    const where = {};
+    if (name && name.trim()) {
+      where.name = { [Op.iLike]: `%${name.trim()}%` };
+    }
+
+    const order = [];
+    if (sortBy === "asc") order.push(["name", "ASC"]);
+    else if (sortBy === "desc") order.push(["name", "DESC"]);
+    else if (sortBy === "oldest") order.push(["createdAt", "ASC"]);
+    else order.push(["createdAt", "DESC"]);
+
+    const offset = (parseInt(page) - 1) * parseInt(limit);
+
+    const { count, rows } = await ProductOccasion.findAndCountAll({
+      where,
+      order,
+      limit: parseInt(limit),
+      offset,
     });
-    res.status(200).json({ success: true, data: occasions });
+
+    res.status(200).json({
+      success: true,
+      data: rows,
+      pagination: {
+        total: count,
+        page: parseInt(page),
+        limit: parseInt(limit),
+        totalPages: Math.ceil(count / limit)
+      }
+    });
   } catch (error) {
     console.error("Get All Occasions Error:", error);
-    res.status(500).json({ success: false, message: "Internal server error occurred while fetching occasions" });
+    res.status(500).json({ success: false, message: "Failed to fetch occasions" });
   }
 };
 

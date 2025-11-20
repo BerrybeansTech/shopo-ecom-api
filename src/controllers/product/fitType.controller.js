@@ -21,13 +21,41 @@ exports.createFitType = async (req, res) => {
 
 exports.getAllFitTypes = async (req, res) => {
   try {
-    const fitTypes = await ProductFitType.findAll({
-      order: [["id", "ASC"]],
+    const { name, page = 1, limit = 10, sortBy = "newest" } = req.query;
+
+    const where = {};
+    if (name && name.trim()) {
+      where.name = { [Op.iLike]: `%${name.trim()}%` };
+    }
+
+    const order = [];
+    if (sortBy === "asc") order.push(["name", "ASC"]);
+    else if (sortBy === "desc") order.push(["name", "DESC"]);
+    else if (sortBy === "oldest") order.push(["createdAt", "ASC"]);
+    else order.push(["createdAt", "DESC"]);
+
+    const offset = (parseInt(page) - 1) * parseInt(limit);
+
+    const { count, rows } = await ProductFitType.findAndCountAll({
+      where,
+      order,
+      limit: parseInt(limit),
+      offset,
     });
-    res.status(200).json({ success: true, data: fitTypes });
+
+    res.status(200).json({
+      success: true,
+      data: rows,
+      pagination: {
+        total: count,
+        page: parseInt(page),
+        limit: parseInt(limit),
+        totalPages: Math.ceil(count / limit)
+      }
+    });
   } catch (error) {
-    console.error("Get Fit Types Error:", error);
-    res.status(500).json({ success: false, message: "Internal server error occurred while fetching fit types" });
+    console.error("Get All Fit Types Error:", error);
+    res.status(500).json({ success: false, message: "Failed to fetch fit types" });
   }
 };
 
