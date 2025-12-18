@@ -6,8 +6,7 @@ const cookieParser = require('cookie-parser');
 const { apiRateLimiter } = require("./middlewares/rateLimite.js");
 const { errorHandler } = require("./middlewares/errorHandler.js");
 
-
-require("./utils/relationship"); 
+require("./utils/relationship");
 
 const customerRoutes = require("./routes/customers.routes.js");
 const otpRoutes = require("./routes/otp.routes.js");

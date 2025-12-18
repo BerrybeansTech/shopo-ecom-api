@@ -64,25 +64,45 @@ exports.createCategory = async (req, res) => {
 
 exports.getAllCategories = async (req, res) => {
   try {
+    const host = req.get("host").split(":")[0];
+    const baseUrl = `${req.protocol}://${host}/`;
+
     const categories = await ProductCategory.findAll({
       include: [
         {
           model: ProductSubCategory,
           as: "ProductSubCategories",
-          include: [{ model: ProductChildCategory, as: "ProductChildCategories" }],
+          include: [
+            { model: ProductChildCategory, as: "ProductChildCategories" }
+          ],
         },
       ],
       order: [["id", "ASC"]],
     });
-    const formattedCategories = categories.map((category) =>
-      formatCategoryResponse(category, req)
-    );
-    res.status(200).json({ success: true, data: formattedCategories });
+
+    const formattedCategories = categories.map(category => {
+      const categoryJson = category.toJSON();
+
+      categoryJson.image = categoryJson.image
+        ? `${baseUrl}${categoryJson.image}`
+        : null;
+
+      return categoryJson;
+    });
+
+    res.status(200).json({
+      success: true,
+      data: formattedCategories,
+    });
   } catch (error) {
     console.error("Get Categories Error:", error);
-    res.status(500).json({ success: false, message: "Internal server error occurred while fetching categories" });
+    res.status(500).json({
+      success: false,
+      message: "Internal server error occurred while fetching categories",
+    });
   }
 };
+
 
 exports.getCategoryById = async (req, res) => {
   try {
@@ -231,28 +251,58 @@ exports.getAllSubCategories = async (req, res) => {
   }
 };
 
-exports.getSubCategoryById = async (req, res) => {
+exports.getCategoryById = async (req, res) => {
   try {
     const { id } = req.params;
+
     if (!/^\d+$/.test(id)) {
-      return res.status(400).json({ success: false, message: "Invalid subcategory ID format" });
+      return res.status(400).json({
+        success: false,
+        message: "Invalid category ID format",
+      });
     }
 
-    const subCategory = await ProductSubCategory.findByPk(id, {
+    const host = req.get("host").split(":")[0];
+    const baseUrl = `${req.protocol}://${host}/`;
+
+    const category = await ProductCategory.findByPk(id, {
       include: [
-        { model: ProductCategory, as: "ProductCategory", attributes: ["id", "name"] },
-        { model: ProductChildCategory, as: "ProductChildCategories" },
+        {
+          model: ProductSubCategory,
+          as: "ProductSubCategories",
+          include: [
+            { model: ProductChildCategory, as: "ProductChildCategories" }
+          ],
+        },
       ],
     });
-    if (!subCategory) {
-      return res.status(404).json({ success: false, message: "Subcategory not found" });
+
+    if (!category) {
+      return res.status(404).json({
+        success: false,
+        message: "Category not found",
+      });
     }
-    res.status(200).json({ success: true, data: subCategory });
+
+    const categoryJson = category.toJSON();
+
+    categoryJson.image = categoryJson.image
+      ? `${baseUrl}${categoryJson.image}`
+      : null;
+
+    res.status(200).json({
+      success: true,
+      data: categoryJson,
+    });
   } catch (error) {
-    console.error("Get SubCategory By Id Error:", error);
-    res.status(500).json({ success: false, message: "Internal server error occurred while fetching subcategory" });
+    console.error("Get Category By Id Error:", error);
+    res.status(500).json({
+      success: false,
+      message: "Internal server error occurred while fetching category",
+    });
   }
 };
+
 
 exports.updateSubCategory = async (req, res) => {
   try {
