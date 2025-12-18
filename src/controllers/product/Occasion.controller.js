@@ -1,4 +1,5 @@
 const ProductOccasion = require("../../models/product/product-Occasion.model");
+const { Op } = require('sequelize');
 
 exports.createOccasion = async (req, res) => {
   try {
@@ -20,11 +21,22 @@ exports.createOccasion = async (req, res) => {
 
 exports.getAllOccasions = async (req, res) => {
   try {
-    const { name, page = 1, limit = 10, sortBy = "newest" } = req.query;
+    const { name, page = 1, limit = 10, sortBy = "newest", ids, all } = req.query;
 
     const where = {};
     if (name && name.trim()) {
       where.name = { [Op.iLike]: `%${name.trim()}%` };
+    }
+
+    // Support ids comma-separated for multi-select (e.g. ids=1,2,3)
+    if (ids && typeof ids === 'string') {
+      const idArray = ids
+        .split(',')
+        .map((v) => v.trim())
+        .filter(Boolean)
+        .map((v) => Number(v))
+        .filter((n) => !Number.isNaN(n));
+      if (idArray.length) where.id = { [Op.in]: idArray };
     }
 
     const order = [];
@@ -32,6 +44,12 @@ exports.getAllOccasions = async (req, res) => {
     else if (sortBy === "desc") order.push(["name", "DESC"]);
     else if (sortBy === "oldest") order.push(["createdAt", "ASC"]);
     else order.push(["createdAt", "DESC"]);
+
+    // If caller requests all (for a UI multi-select), return full list without pagination
+    if (String(all).toLowerCase() === 'true') {
+      const rows = await ProductOccasion.findAll({ where, order });
+      return res.status(200).json({ success: true, data: rows });
+    }
 
     const offset = (parseInt(page) - 1) * parseInt(limit);
 

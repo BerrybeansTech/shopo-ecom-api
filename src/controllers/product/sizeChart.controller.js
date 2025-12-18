@@ -9,14 +9,15 @@ const getAllSizeCharts = async (req, res) => {
       include: [
         {
           model: ProductCategory,
+          as: "category",
           attributes: ['id', 'name']
-        } 
+        }
       ],
       order: [["id", "ASC"]]
     });
 
     // const baseUrl = `${req.protocol}://${req.get("host")}/`;
-    
+
     const host = req.get("host").split(":")[0];
     const baseUrl = `${req.protocol}://${host}/`;
 
@@ -62,6 +63,7 @@ const getSizeChartById = async (req, res) => {
       include: [
         {
           model: ProductCategory,
+          as: "category",
           attributes: ['id', 'name']
         }
       ]
@@ -75,7 +77,7 @@ const getSizeChartById = async (req, res) => {
     }
 
     // const baseUrl = `${req.protocol}://${req.get("host")}/`;
-    
+
     const host = req.get("host").split(":")[0];
     const baseUrl = `${req.protocol}://${host}/`;
 
@@ -125,7 +127,7 @@ const createSizeChart = async (req, res) => {
       }
     }
 
- 
+
     let image = [];
 
     if (!req.files?.image || req.files.image.length === 0) {
@@ -142,9 +144,9 @@ const createSizeChart = async (req, res) => {
       image
     });
 
-    
+
     // const baseUrl = `${req.protocol}://${req.get("host")}/`;
-    
+
     const host = req.get("host").split(":")[0];
     const baseUrl = `${req.protocol}://${host}/`;
 
@@ -217,7 +219,7 @@ const updateSizeChart = async (req, res) => {
       }
     }
 
-   
+
     if (typeof oldImage === "string") {
       try {
         oldImage = JSON.parse(oldImage);
@@ -227,7 +229,7 @@ const updateSizeChart = async (req, res) => {
       }
     }
 
-    
+
     oldImage = Array.isArray(oldImage) ? oldImage.map((img) => {
       const uploadIndex = img.indexOf("uploads/");
       return uploadIndex !== -1 ? img.slice(uploadIndex) : img;
@@ -235,7 +237,7 @@ const updateSizeChart = async (req, res) => {
 
     let image = [...oldImage];
 
-  
+
     const removedImages = (existing.image || []).filter(
       (img) => !oldImage.includes(img)
     );
@@ -270,16 +272,17 @@ const updateSizeChart = async (req, res) => {
       include: [
         {
           model: ProductCategory,
+          as: "category",
           attributes: ['id', 'name']
         }
       ]
     });
 
     // const baseUrl = `${req.protocol}://${req.get("host")}/`;
-    
+
     const host = req.get("host").split(":")[0];
     const baseUrl = `${req.protocol}://${host}/`;
-    
+
     const data = updatedSizeChart.toJSON();
     if (Array.isArray(data.image)) {
       data.image = data.image.map((imgPath) => `${baseUrl}${imgPath}`);
@@ -325,7 +328,7 @@ const deleteSizeChart = async (req, res) => {
       });
     }
 
-   
+
     if (Array.isArray(sizeChart.image)) {
       sizeChart.image.forEach((imgPath) => {
         try {
@@ -335,7 +338,7 @@ const deleteSizeChart = async (req, res) => {
           }
         } catch (fsError) {
           console.error("Error deleting image file:", fsError);
-        
+
         }
       });
     }
