@@ -1,4 +1,5 @@
 const ProductOccasion = require("../../models/product/product-Occasion.model");
+const Product = require("../../models/product/product.model");
 const { Op } = require('sequelize');
 
 exports.createOccasion = async (req, res) => {
@@ -21,7 +22,7 @@ exports.createOccasion = async (req, res) => {
 
 exports.getAllOccasions = async (req, res) => {
   try {
-    const { name, page = 1, limit = 10, sortBy = "newest", ids, all } = req.query;
+    const { name, page = 1, limit = 10, sortBy = "newest", ids, all, material } = req.query;
 
     const where = {};
     if (name && name.trim()) {
@@ -39,6 +40,23 @@ exports.getAllOccasions = async (req, res) => {
       if (idArray.length) where.id = { [Op.in]: idArray };
     }
 
+    const include = [];
+    if (material) {
+      const materialIds = material.split(',').map(id => Number(id.trim())).filter(n => !Number.isNaN(n));
+      if (materialIds.length > 0) {
+        // Find occasions that have products with the given material IDs
+        include.push({
+          model: Product,
+          as: 'products', // Required alias from relationship.js
+          attributes: [], // We don't need product data, just the filtering
+          where: {
+            productMaterialId: { [Op.in]: materialIds }
+          },
+          required: true // Inner join to ensure we only get occasions with matching products
+        });
+      }
+    }
+
     const order = [];
     if (sortBy === "asc") order.push(["name", "ASC"]);
     else if (sortBy === "desc") order.push(["name", "DESC"]);
@@ -47,7 +65,12 @@ exports.getAllOccasions = async (req, res) => {
 
     // If caller requests all (for a UI multi-select), return full list without pagination
     if (String(all).toLowerCase() === 'true') {
-      const rows = await ProductOccasion.findAll({ where, order });
+      const rows = await ProductOccasion.findAll({
+        where,
+        order,
+        include,
+        distinct: true // Ensure unique occasions are returned
+      });
       return res.status(200).json({ success: true, data: rows });
     }
 
@@ -58,6 +81,8 @@ exports.getAllOccasions = async (req, res) => {
       order,
       limit: parseInt(limit),
       offset,
+      include,
+      distinct: true // distinct count of occasions
     });
 
     res.status(200).json({

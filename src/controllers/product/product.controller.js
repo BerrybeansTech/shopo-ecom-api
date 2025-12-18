@@ -754,7 +754,7 @@ const createProduct = async (req, res) => {
         subCategoryId,
         childCategoryId,
         productMaterialId: parsedApparelDetails.productMaterialId,
-        fitType: parsedApparelDetails.fitType,
+        fitTypeId: parsedApparelDetails.fitTypeId || parsedApparelDetails.fitType,
         occasionId: parsedApparelDetails.occasionId,
         seasonal: parsedApparelDetails.seasonal,
         mrp: parseFloat(mrp),
@@ -907,6 +907,16 @@ const updateProduct = async (req, res) => {
       thumbnailImage = `${process.env.FILE_PATH}${req.files.thumbnailImage[0].filename}`;
     }
 
+    let parsedApparelDetails = {};
+    try {
+      parsedApparelDetails =
+        typeof aparelDetials === "string"
+          ? JSON.parse(aparelDetials)
+          : aparelDetials || {};
+    } catch (err) {
+      console.warn("Invalid aparelDetials JSON in update:", aparelDetials);
+    }
+
     await Product.update(
       {
         name,
@@ -914,11 +924,13 @@ const updateProduct = async (req, res) => {
         metaTitle,
         metaDescription,
         careInstructions,
-        categoryId,
-        subCategoryId,
-        childCategoryId,
-        aparelDetials,
-        inventory,
+        categoryId: categoryId || undefined,
+        subCategoryId: subCategoryId || undefined,
+        childCategoryId: childCategoryId || undefined,
+        productMaterialId: parsedApparelDetails.productMaterialId,
+        fitTypeId: parsedApparelDetails.fitTypeId || parsedApparelDetails.fitType,
+        occasionId: parsedApparelDetails.occasionId,
+        seasonal: parsedApparelDetails.seasonal,
         mrp,
         sellingPrice,
         gst,
