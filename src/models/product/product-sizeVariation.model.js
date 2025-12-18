@@ -9,7 +9,7 @@ const productSizeVariation = sequelize.define('productSizeVariation', {
     primaryKey: true
   },
   type: {
-    type: DataTypes.ENUM('topwear', 'bottomwear'),
+    type: DataTypes.STRING(100),
     allowNull: false
   },
   size: {

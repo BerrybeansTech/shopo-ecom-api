@@ -69,13 +69,216 @@ const getAllProduct = async (req, res) => {
       whereClause.categoryId = { [Op.in]: categoryArray };
     }
 
-    if (subCategory) whereClause.subCategoryId = subCategory;
-    if (childCategory) whereClause.childCategoryId = childCategory;
+    if (subCategory) {
+      const subCategoryArray = subCategory.split(",").map((id) => Number(id.trim()));
+      whereClause.subCategoryId = { [Op.in]: subCategoryArray };
+    }
+    if (childCategory) {
+      const childCategoryArray = childCategory.split(",").map((id) => Number(id.trim()));
+      whereClause.childCategoryId = { [Op.in]: childCategoryArray };
+    }
 
     if (minPrice || maxPrice) {
       whereClause.sellingPrice = {};
       if (minPrice) whereClause.sellingPrice[Op.gte] = parseFloat(minPrice);
       if (maxPrice) whereClause.sellingPrice[Op.lte] = parseFloat(maxPrice);
+    }
+
+    // Parse multi-select filters for colors and sizes.
+    // Comma-separated values mean OR (use Op.in). Combining different filters
+    // (e.g. productColor=Red,Blue&productSize=M,L) will apply both (AND).
+    let productColorArray;
+    if (productColor) {
+      productColorArray = productColor
+        .split(",")
+        .map((c) => c.trim())
+        .filter(Boolean);
+    }
+
+    let productSizeArray;
+    if (productSize) {
+      productSizeArray = productSize
+        .split(",")
+        .map((s) => s.trim())
+        .filter(Boolean);
+    }
+
+    // Resolve variation IDs for size and colors to avoid ON-clause alias problems
+    let matchingSizeIds = null;
+    if (productSizeArray && productSizeArray.length) {
+      const jsonSizes = JSON.stringify(productSizeArray);
+      const sizeRows = await ProductSizeVariation.findAll({
+        where: where(fn("JSON_OVERLAPS", col("size"), literal(`'${jsonSizes}'`)), true),
+        attributes: ["id"],
+      });
+      matchingSizeIds = sizeRows.map((r) => r.id);
+      // if no matching size variations, return early with empty result
+      if (!matchingSizeIds.length) {
+        return res.json({ success: true, data: [], pagination: { total: 0, page: 1, limit: parseInt(req.query.limit) || 10, totalPages: 0 } });
+      }
+    }
+
+    let matchingColorIds = null;
+    if (productColorArray && productColorArray.length) {
+      const colorRows = await ProductColorVariation.findAll({
+        where: { color: { [Op.in]: productColorArray } },
+        attributes: ["id"],
+      });
+      matchingColorIds = colorRows.map((r) => r.id);
+      if (!matchingColorIds.length) {
+        return res.json({ success: true, data: [], pagination: { total: 0, page: 1, limit: parseInt(req.query.limit) || 10, totalPages: 0 } });
+      }
+    }
+
+    // --- Review-based filtering ---
+    // Supported query params:
+    // - minAvgRating=4
+    // - minReviewCount=10
+    // - ratingCount[5]=3  (number of 5-star reviews >= 3)
+    const minAvgRating = req.query.minAvgRating ? parseFloat(req.query.minAvgRating) : null;
+    const minReviewCount = req.query.minReviewCount ? parseInt(req.query.minReviewCount, 10) : null;
+
+    // ratingCount can be parsed as an object like { '5': '3' }
+    const ratingCountFilters = {};
+    if (req.query.ratingCount && typeof req.query.ratingCount === 'object') {
+      for (const k of Object.keys(req.query.ratingCount)) {
+        const star = parseInt(k, 10);
+        const val = parseInt(req.query.ratingCount[k], 10);
+        if (!Number.isNaN(star) && !Number.isNaN(val)) ratingCountFilters[star] = val;
+      }
+    }
+
+    // New: Multi-select rating filter (e.g. rating=3,4,5) checks average rating floor
+    let ratingArray = null;
+    if (req.query.rating) {
+      ratingArray = req.query.rating.split(",").map(r => parseInt(r.trim(), 10)).filter(n => !Number.isNaN(n));
+    }
+
+    const hasReviewFilters = (minAvgRating !== null) || (minReviewCount !== null) || Object.keys(ratingCountFilters).length > 0 || (ratingArray && ratingArray.length > 0);
+    if (hasReviewFilters) {
+      // Build aggregation attributes
+      const reviewAttrs = [
+        'productId',
+        [fn('AVG', col('rating')), 'avgRating'],
+        [fn('COUNT', col('rating')), 'reviewCount'],
+      ];
+      for (const starStr of Object.keys(ratingCountFilters)) {
+        const star = parseInt(starStr, 10);
+        // SUM(CASE WHEN rating = X THEN 1 ELSE 0 END) as rating_X_count
+        reviewAttrs.push([
+          fn('SUM', literal(`CASE WHEN rating = ${star} THEN 1 ELSE 0 END`)),
+          `rating_${star}_count`,
+        ]);
+      }
+
+      const aggregated = await ProductReview.findAll({
+        attributes: reviewAttrs,
+        group: ['productId'],
+      });
+
+      const matchingFromReviews = aggregated.filter((r) => {
+        const dv = r.toJSON();
+        const avg = parseFloat(dv.avgRating || 0);
+
+        if (ratingArray && ratingArray.length > 0) {
+          const floorAvg = Math.floor(avg);
+          // If user selects 4, it matches 4.0 to 4.9.
+          // If 5, matches 5.0. 
+          // If the product has 0 reviews (avg 0), floor is 0.
+          if (!ratingArray.includes(floorAvg)) return false;
+        }
+
+        if (minAvgRating !== null) {
+          if (avg < minAvgRating) return false;
+        }
+        if (minReviewCount !== null) {
+          const cnt = parseInt(dv.reviewCount || 0, 10);
+          if (cnt < minReviewCount) return false;
+        }
+        for (const starStr of Object.keys(ratingCountFilters)) {
+          const star = parseInt(starStr, 10);
+          const needed = ratingCountFilters[star];
+          const have = parseInt(dv[`rating_${star}_count`] || 0, 10);
+          if (have < needed) return false;
+        }
+        return true;
+      }).map((r) => r.productId);
+
+      if (!matchingFromReviews.length) {
+        return res.json({ success: true, data: [], pagination: { total: 0, page: 1, limit: parseInt(req.query.limit) || 10, totalPages: 0 } });
+      }
+
+      // Apply as additional where clause (intersect with existing id filter if any)
+      if (whereClause.id && whereClause.id[Op.in]) {
+        // intersect two arrays
+        const existingIds = whereClause.id[Op.in];
+        const intersect = existingIds.filter((id) => matchingFromReviews.includes(id));
+        whereClause.id = { [Op.in]: intersect };
+      } else {
+        whereClause.id = { [Op.in]: matchingFromReviews };
+      }
+    }
+
+    // --- Stock-based filtering (inStock=true|false) ---
+    if (req.query.inStock !== undefined) {
+      const wantInStock = String(req.query.inStock).toLowerCase() === 'true';
+
+      // Aggregate inventory totals per product
+      const invAgg = await ProductInventory.findAll({
+        attributes: [
+          'productId',
+          [fn('SUM', col('availableQuantity')), 'totalQty'],
+        ],
+        group: ['productId'],
+      });
+
+      const invMap = invAgg.reduce((acc, row) => {
+        const v = row.toJSON();
+        acc[v.productId] = parseInt(v.totalQty || 0, 10);
+        return acc;
+      }, {});
+
+      const invIds = Object.keys(invMap).map((s) => Number(s));
+
+      let matchingStockIds = [];
+      if (wantInStock) {
+        // products whose summed availableQuantity > 0
+        matchingStockIds = invIds.filter((id) => invMap[id] > 0);
+      } else {
+        // out-of-stock: include products with sum == 0 AND products with no inventory rows
+        const zeroIds = invIds.filter((id) => invMap[id] === 0);
+        // products without any inventory rows
+        const noInvWhere = invIds.length ? { id: { [Op.notIn]: invIds } } : {};
+        const noInvProducts = await Product.findAll({ where: noInvWhere, attributes: ['id'] });
+        const noInvIds = noInvProducts.map((p) => p.id);
+        matchingStockIds = [...zeroIds, ...noInvIds];
+      }
+
+      if (!matchingStockIds.length) {
+        return res.json({ success: true, data: [], pagination: { total: 0, page: 1, limit: parseInt(req.query.limit) || 10, totalPages: 0 } });
+      }
+
+      // intersect with existing id filter if present
+      if (whereClause.id && whereClause.id[Op.in]) {
+        const existingIds = whereClause.id[Op.in];
+        const intersect = existingIds.filter((id) => matchingStockIds.includes(id));
+        whereClause.id = { [Op.in]: intersect };
+      } else {
+        whereClause.id = { [Op.in]: matchingStockIds };
+      }
+    }
+
+    // Build a JSON_OVERLAPS where expression for size JSON column (MySQL 8+).
+    // Use Sequelize `where(fn(...), true)` to ensure the condition is placed
+    // correctly in the generated SQL rather than a raw literal that may
+    // reference aliases before they're defined.
+    let productSizeWhereExpr;
+    if (productSizeArray && productSizeArray.length) {
+      const jsonSizes = JSON.stringify(productSizeArray);
+      productSizeWhereExpr = where(
+        fn("JSON_OVERLAPS", col("productSize.size"), literal(`'${jsonSizes}'`)),
+        true
+      );
     }
 
     const page = parseInt(req.query.page) || 1;
@@ -142,24 +345,27 @@ const getAllProduct = async (req, res) => {
         {
           model: ProductInventory,
           as: "inventories",
+          // apply inventory-level where using resolved variation ids
+          where: (function () {
+            const w = {};
+            if (matchingColorIds && matchingColorIds.length) w.productColorVariationId = { [Op.in]: matchingColorIds };
+            if (matchingSizeIds && matchingSizeIds.length) w.productSizeVariationId = { [Op.in]: matchingSizeIds };
+            return Object.keys(w).length ? w : undefined;
+          })(),
           include: [
             {
               model: ProductColorVariation,
               as: "productColor",
               attributes: ["id", "color"],
-              where: productColor ? { color: productColor } : undefined,
-              required: !!productColor,
             },
             {
               model: ProductSizeVariation,
               as: "productSize",
               attributes: ["id", "size"],
-              where: productSize ? { size: productSize } : undefined,
-              required: !!productSize,
             },
           ],
           attributes: ["id", "availableQuantity"],
-          required: false,
+          required: !!((matchingColorIds && matchingColorIds.length) || (matchingSizeIds && matchingSizeIds.length)),
         },
       ],
       // group: ["Product.id"],
@@ -196,12 +402,64 @@ const getAllProduct = async (req, res) => {
       data.galleryImage = galleryArray.map((img) => `${baseUrl}${img}`);
       data.averageRating = parseFloat(data.averageRating || 0).toFixed(1);
       data.reviewCount = parseInt(data.reviewCount || 0);
+
+      // If a size filter was requested, reduce each inventory's productSize.size
+      // to only the intersection with the requested sizes so the response shows
+      // only the matched sizes (e.g. ["S","M","L","XL"] -> ["M","L"]).
+      try {
+        if (
+          Array.isArray(data.inventories) &&
+          data.inventories.length &&
+          productSizeArray &&
+          productSizeArray.length
+        ) {
+          data.inventories = data.inventories.map((inv) => {
+            if (inv && inv.productSize && inv.productSize.size) {
+              let sizes = inv.productSize.size;
+              if (typeof sizes === "string") {
+                try {
+                  sizes = JSON.parse(sizes);
+                } catch (e) {
+                  sizes = [];
+                }
+              }
+              if (Array.isArray(sizes)) {
+                const filtered = sizes.filter((s) =>
+                  productSizeArray.includes(String(s))
+                );
+                inv.productSize.size = filtered;
+              }
+            }
+            return inv;
+          });
+        }
+      } catch (err) {
+        // non-fatal: leave sizes unchanged on error
+        console.warn("Failed to filter product sizes in response:", err);
+      }
+
       return data;
     });
 
     let count = 0;
     if (!newArrival) {
-      count = await Product.count({ where: whereClause });
+      // If color/size filters are used they are applied via includes, so count must
+      // account for those joins. Use distinct count on product id when includes exist.
+      const hasInventoryFilter =
+        (productColorArray && productColorArray.length) ||
+        (productSizeArray && productSizeArray.length);
+
+      if (hasInventoryFilter) {
+        const countOptions = {
+          where: whereClause,
+          include: queryOptions.include,
+          distinct: true,
+          col: "id",
+        };
+        count = await Product.count(countOptions);
+      } else {
+        count = await Product.count({ where: whereClause });
+      }
     }
 
     res.json({
@@ -210,13 +468,13 @@ const getAllProduct = async (req, res) => {
       ...(newArrival
         ? {}
         : {
-            pagination: {
-              total: count,
-              page,
-              limit,
-              totalPages: Math.ceil(count / limit),
-            },
-          }),
+          pagination: {
+            total: count,
+            page,
+            limit,
+            totalPages: Math.ceil(count / limit),
+          },
+        }),
     });
   } catch (error) {
     console.error("Error retrieving products:", error);
@@ -469,8 +727,8 @@ const createProduct = async (req, res) => {
 
     const galleryImage = req.files?.galleryImage
       ? req.files.galleryImage.map(
-          (file) => `${process.env.FILE_PATH}${file.filename}`
-        )
+        (file) => `${process.env.FILE_PATH}${file.filename}`
+      )
       : [];
 
     let parsedApparelDetails = {};
