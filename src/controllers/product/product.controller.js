@@ -26,6 +26,7 @@ const getAllProduct = async (req, res) => {
       productColor,
       productSize,
       productMaterial,
+      material,
       fitType,
       occasion,
       status,
@@ -56,8 +57,9 @@ const getAllProduct = async (req, res) => {
       whereClause.occasionId = { [Op.in]: occasionArray };
     }
 
-    if (productMaterial) {
-      const productMaterialArray = productMaterial
+    if (productMaterial || material) {
+      const materialParam = productMaterial || material;
+      const productMaterialArray = materialParam
         .split(",")
         .map((id) => Number(id.trim()));
 
