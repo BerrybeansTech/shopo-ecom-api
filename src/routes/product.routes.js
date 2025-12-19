@@ -75,7 +75,7 @@ router.delete("/category/delete/:id", authenticateToken, categoryController.dele
 
 router.post("/subcategory/create", authenticateToken, categoryController.createSubCategory);
 router.get("/subcategory/get-all", categoryController.getAllSubCategories);
-router.get("/subcategory/get-subcategory/:id", categoryController.getSubCategoryById);
+// router.get("/subcategory/get-subcategory/:id", categoryController.getSubCategoryById);
 router.put("/subcategory/update/:id", authenticateToken, categoryController.updateSubCategory);
 router.delete("/subcategory/delete/:id", authenticateToken, categoryController.deleteSubCategory);
 
