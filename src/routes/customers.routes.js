@@ -1,5 +1,6 @@
 const express = require('express');
 const CustomerController = require('../controllers/customer/customers.controller')
+const CustomerAddressController = require('../controllers/customer/customerAddress.controller')
 const CartItemsController = require('../controllers/customer/cartItems.controller')
 
 // const upload = require('../utils/multer')
@@ -17,6 +18,11 @@ router.put('/update-customer', authenticateToken.authenticateToken, CustomerCont
 router.delete('/delete-customer/:id', authenticateToken.authenticateToken, CustomerController.deleteCustomers);
 router.get('/check-exists', CustomerController.checkUserExists);
 
+router.get('/get-all-address',authenticateToken.authenticateToken, CustomerAddressController.getAllAddresses)
+router.get('/get-address/:id', authenticateToken.authenticateToken, CustomerAddressController.getAddressById)
+router.post('/create-address', authenticateToken.authenticateToken, CustomerAddressController.createAddress);
+router.put('/update-address', authenticateToken.authenticateToken, CustomerAddressController.updateAddress);
+router.delete('/delete-address/:id', authenticateToken.authenticateToken, CustomerAddressController.deleteAddress);
 
 router.get('/wishlist/:id', authenticateToken.authenticateToken, CustomerController.getUserWishlist);
 router.post('/update-wishlist', authenticateToken.authenticateToken, CustomerController.updateWishlist);
