@@ -260,7 +260,7 @@ exports.getReviewsByProduct = async (req, res) => {
 
     const { count, rows: reviews } = await ProductReview.findAndCountAll({
       where: whereClause,
-      include: [{ model: Customer, attributes: ["id", "name", "email", "profileImage"] }],
+      include: [{ model: Customer, attributes: ["id", "name", "email"] }],
       order,
       limit: limitNum,
       offset,
@@ -283,9 +283,6 @@ exports.getReviewsByProduct = async (req, res) => {
       if (data.images?.length > 0) {
         data.images = data.images.map(img => `${baseUrl}${img}`);
       } else data.images = [];
-      if (data.Customer?.profileImage) {
-        data.Customer.profileImage = `${baseUrl}${data.Customer.profileImage}`;
-      }
       return data;
     });
 

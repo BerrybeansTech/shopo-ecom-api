@@ -26,6 +26,10 @@ const Address = sequelize.define('Address', {
   postalCode: {
     type: DataTypes.STRING,
   },
+  isDefault: {
+    type: DataTypes.BOOLEAN,
+    defaultValue: false
+  }
 }, {
   tableName: 'Address',
   timestamps: true,
