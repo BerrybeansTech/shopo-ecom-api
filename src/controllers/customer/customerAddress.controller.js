@@ -93,25 +93,42 @@ const createAddress = async (req, res) => {
 
 
 const updateAddress = async (req, res) => {
-  const { id, address, city, state, country, postalCode } = req.body;
+  const { id, address, city, state, country, postalCode, isDefault } = req.body;
 
   try {
     const existing = await CustomerAddress.findByPk(id);
+
     if (!existing) {
       return res.status(404).json({ success: false, message: "Address not found" });
     }
 
+    if (isDefault) {
+      await CustomerAddress.update(
+        { isDefault: false },
+        { where: { customerId: existing.customerId } }
+      );
+    }
+
     await CustomerAddress.update(
-      { address, city, state, country, postalCode },
+      {
+        address,
+        city,
+        state,
+        country,
+        postalCode,
+        isDefault: !!isDefault,
+      },
       { where: { id } }
     );
 
     res.json({ success: true, message: "Address updated successfully" });
+
   } catch (error) {
     console.error("Error updating address:", error);
     res.status(500).json({ success: false, message: "Failed to update address" });
   }
 };
+
 
 
 const deleteAddress = async (req, res) => {
