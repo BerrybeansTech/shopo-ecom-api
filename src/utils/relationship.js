@@ -17,6 +17,8 @@ const Orders = require("../models/orders/order.model");
 const OrderItems = require("../models/orders/orderItems.model");
 const Invoice = require("../models/orders/invoice.model");
 const CustomerAddress = require("../models/customer/customerAddress.model");
+const ComboOffer = require("../models/offers/comboOffer.model");
+
 
 // ProductCategory → ProductSubCategory (One-to-Many)
 ProductCategory.hasMany(ProductSubCategory, {
@@ -325,6 +327,17 @@ Invoice.belongsTo(Customer, { foreignKey: 'customerId', as: 'customer' });
 
 Customer.hasMany(CustomerAddress, { foreignKey: 'customerId', onDelete: 'CASCADE' });
 CustomerAddress.belongsTo(Customer, { foreignKey: 'customerId', as: 'customer' });
+
+ComboOffer.belongsTo(ProductChildCategory, {
+  foreignKey: "childCategoryId",
+  as: "childCategory",
+  onDelete: "CASCADE",
+  onUpdate: "CASCADE",
+});
+ProductChildCategory.hasMany(ComboOffer, {
+  foreignKey: "childCategoryId",
+  as: "comboOffer",
+});
 
 module.exports = {
   Customer,
