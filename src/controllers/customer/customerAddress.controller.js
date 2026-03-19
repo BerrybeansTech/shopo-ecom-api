@@ -63,7 +63,7 @@ const getAddressById = async (req, res) => {
 
 
 const createAddress = async (req, res) => {
-  const { customerId, address, city, state, country, postalCode } = req.body;
+  const { customerId, name, phone, address, city, state, country, postalCode } = req.body;
 
   try {
     const customerExists = await Customer.findByPk(customerId);
@@ -73,6 +73,8 @@ const createAddress = async (req, res) => {
 
     const newAddress = await CustomerAddress.create({
       customerId,
+      name,
+      phone,
       address,
       city,
       state,
@@ -93,7 +95,7 @@ const createAddress = async (req, res) => {
 
 
 const updateAddress = async (req, res) => {
-  const { id, address, city, state, country, postalCode, isDefault } = req.body;
+  const { id, name, phone, address, city, state, country, postalCode, isDefault } = req.body;
 
   try {
     const existing = await CustomerAddress.findByPk(id);
@@ -111,6 +113,8 @@ const updateAddress = async (req, res) => {
 
     await CustomerAddress.update(
       {
+        name,
+        phone,
         address,
         city,
         state,
