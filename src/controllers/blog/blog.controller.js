@@ -18,8 +18,11 @@ const getAllBlog = async (req, res) => {
     if (andConditions.length > 0) {
       whereClause[Op.and] = andConditions;
     }
+    let host = req.get("host");
 
-    const baseUrl = `${req.protocol}://${req.get("host")}/`;
+    host = host ? host.split(":")[0] : "";
+
+    const baseUrl = `${req.protocol}://${host}/`;
 
     const page = parseInt(req.query.page) || 1;
     const limit = parseInt(req.query.limit) || 10;
@@ -34,17 +37,15 @@ const getAllBlog = async (req, res) => {
 
     const updatedBlogs = blogs.map((t) => {
       const featuredImage = t.featuredImage
-        ? `${baseUrl}${
-            Array.isArray(t.featuredImage)
-              ? t.featuredImage[0]
-              : t.featuredImage
-          }`
+        ? `${baseUrl}${Array.isArray(t.featuredImage)
+          ? t.featuredImage[0]
+          : t.featuredImage
+        }`
         : null;
 
       const bannerImage = t.bannerImage
-        ? `${baseUrl}${
-            Array.isArray(t.bannerImage) ? t.bannerImage[0] : t.bannerImage
-          }`
+        ? `${baseUrl}${Array.isArray(t.bannerImage) ? t.bannerImage[0] : t.bannerImage
+        }`
         : null;
 
       return {
@@ -77,7 +78,12 @@ const getBlogById = async (req, res) => {
   const { id } = req.params;
 
   try {
-    const baseUrl = `${req.protocol}://${req.get("host")}/`;
+    
+let host = req.get("host");
+
+host = host ? host.split(":")[0] : "";
+
+const baseUrl = `${req.protocol}://${host}/`;
 
     const t = await blog.findOne({ where: { id } });
 
@@ -88,15 +94,13 @@ const getBlogById = async (req, res) => {
     }
 
     const featuredImage = t.featuredImage
-      ? `${baseUrl}${
-          Array.isArray(t.featuredImage) ? t.featuredImage[0] : t.featuredImage
-        }`
+      ? `${baseUrl}${Array.isArray(t.featuredImage) ? t.featuredImage[0] : t.featuredImage
+      }`
       : null;
 
     const bannerImage = t.bannerImage
-      ? `${baseUrl}${
-          Array.isArray(t.bannerImage) ? t.bannerImage[0] : t.bannerImage
-        }`
+      ? `${baseUrl}${Array.isArray(t.bannerImage) ? t.bannerImage[0] : t.bannerImage
+      }`
       : null;
 
     res.json({

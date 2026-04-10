@@ -13,6 +13,7 @@ const buildBaseUrl = (req) => {
   }
   const host = req.get("host");
   if (!host) return "";
+  host = host.split(":")[0];
   const protocol = req.protocol || "http";
   return ensureTrailingSlash(`${protocol}://${host}`);
 };

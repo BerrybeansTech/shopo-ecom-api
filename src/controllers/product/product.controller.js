@@ -14,6 +14,7 @@ const ProductSizeVariation = require("../../models/product/product-sizeVariation
 const ProductOccasion = require("../../models/product/product-Occasion.model");
 // const ProductSubCategory = require("../models/productSubCategory.model");
 const ProductReview = require("../../models/product/product-review");
+const { log } = require("console");
 
 const getAllProduct = async (req, res) => {
   try {
@@ -468,6 +469,8 @@ const getAllProduct = async (req, res) => {
           galleryArray = Array.isArray(data.galleryImage)
             ? data.galleryImage
             : JSON.parse(data.galleryImage);
+            console.log(galleryArray, "galleryArrayyyyyyyyyyyyyyyyyyyyyyyyyyy");
+            
         } catch {
           galleryArray = [];
         }
