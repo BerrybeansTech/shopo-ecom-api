@@ -4,6 +4,7 @@ const Customer = require("../../models/customer/customers.model");
 const path = require("path");
 const fs = require("fs");
 
+
 exports.createReview = async (req, res) => {
   try {
     const { productId, rating, comment } = req.body;
@@ -24,7 +25,6 @@ exports.createReview = async (req, res) => {
       });
     }
 
-    
     const product = await Product.findByPk(productId);
     if (!product) {
       return res.status(404).json({
@@ -41,7 +41,6 @@ exports.createReview = async (req, res) => {
       });
     }
 
-    // Check if customer has already reviewed this product
     const existingReview = await ProductReview.findOne({
       where: { productId, customerId }
     });
@@ -53,18 +52,21 @@ exports.createReview = async (req, res) => {
       });
     }
 
-    // Handle image uploads
+    // ✅ Handle images SAME as product API
     let imagePaths = [];
+
     if (req.files && req.files.length > 0) {
-      imagePaths = req.files.map(file => file.filename);
+      imagePaths = req.files.map(
+        (file) => `${process.env.FILE_PATH}${file.filename}`
+      );
     }
 
     const review = await ProductReview.create({
-      productId,
+      productId: parseInt(productId),
       customerId,
       rating: parsedRating,
-      comment: comment && typeof comment === 'string' ? comment.trim() : null,
-      images: imagePaths
+      comment: comment && typeof comment === "string" ? comment.trim() : null,
+      images: JSON.stringify(imagePaths) // ✅ consistent storage
     });
 
     res.status(201).json({
@@ -72,14 +74,17 @@ exports.createReview = async (req, res) => {
       message: "Review created successfully",
       data: review
     });
+
   } catch (error) {
     console.error("Create Review Error:", error);
-    if (error.name === 'SequelizeValidationError') {
+
+    if (error.name === "SequelizeValidationError") {
       return res.status(400).json({
         success: false,
         message: error.errors[0].message
       });
     }
+
     res.status(500).json({
       success: false,
       message: "Internal server error occurred while creating review"
@@ -277,7 +282,8 @@ exports.getReviewsByProduct = async (req, res) => {
     }, { 1: 0, 2: 0, 3: 0, 4: 0, 5: 0 });
 
     // Format image URLs
-    const baseUrl = `${req.protocol}://${req.get("host")}/uploads/`;
+    const host = req.get("host").split(":")[0];
+    const baseUrl = `${req.protocol}://${host}/`;
     const formattedReviews = reviews.map(review => {
       const data = review.toJSON();
       if (data.images?.length > 0) {
@@ -363,7 +369,7 @@ exports.getReviewById = async (req, res) => {
 exports.updateReview = async (req, res) => {
   try {
     const { id } = req.params;
-    const { rating, comment } = req.body;
+    const { rating, comment, oldImages = [] } = req.body;
     const customerId = req.user.id;
 
     if (!/^\d+$/.test(id)) {
@@ -374,6 +380,7 @@ exports.updateReview = async (req, res) => {
     }
 
     const review = await ProductReview.findByPk(id);
+
     if (!review) {
       return res.status(404).json({
         success: false,
@@ -381,7 +388,7 @@ exports.updateReview = async (req, res) => {
       });
     }
 
-  
+    // ✅ Ownership check
     if (review.customerId !== customerId) {
       return res.status(403).json({
         success: false,
@@ -389,45 +396,95 @@ exports.updateReview = async (req, res) => {
       });
     }
 
+    // ✅ Handle rating
     if (rating !== undefined) {
       const parsedRating = parseInt(rating, 10);
       if (!parsedRating || isNaN(parsedRating) || parsedRating < 1 || parsedRating > 5) {
         return res.status(400).json({
           success: false,
-          message: "Rating must be a number between 1 and 5 if provided"
+          message: "Rating must be between 1 and 5"
         });
       }
       review.rating = parsedRating;
     }
 
+    // ✅ Handle comment
     if (comment !== undefined) {
-      if (typeof comment !== 'string') {
+      if (typeof comment !== "string") {
         return res.status(400).json({
           success: false,
-          message: "Comment must be a string if provided"
+          message: "Comment must be a string"
         });
       }
       review.comment = comment.trim() || null;
     }
 
-    // Handle image updates
-    if (req.files && req.files.length > 0) {
-      // Delete old images if they exist
-      if (review.images && review.images.length > 0) {
-        review.images.forEach(image => {
-          const imagePath = path.join(__dirname, '../../../uploads', image);
-          if (fs.existsSync(imagePath)) {
-            fs.unlinkSync(imagePath);
-          }
-        });
+    // ✅ Convert oldImages to array
+    let parsedOldImages = oldImages;
+
+    if (typeof parsedOldImages === "string") {
+      try {
+        parsedOldImages = JSON.parse(parsedOldImages);
+      } catch {
+        parsedOldImages = [];
       }
-      // Set new images
-      review.images = req.files.map(file => file.filename);
     }
+
+    // normalize paths
+    parsedOldImages = parsedOldImages.map((img) => {
+      const index = img.indexOf("uploads/");
+      return index !== -1 ? img.slice(index) : img;
+    });
+
+    // ✅ Convert existing DB images to array
+    let existingImages = review.images || [];
+
+    if (typeof existingImages === "string") {
+      try {
+        existingImages = JSON.parse(existingImages);
+      } catch {
+        existingImages = existingImages.split(",");
+      }
+    }
+
+    if (!Array.isArray(existingImages)) {
+      existingImages = [];
+    }
+
+    // ✅ Start with old images
+    let finalImages = [...parsedOldImages];
+
+    // ✅ Find removed images
+    const removedImages = existingImages.filter(
+      (img) => !parsedOldImages.includes(img)
+    );
+
+    // ✅ Delete removed images
+    for (const img of removedImages) {
+      const filePath = path.join(__dirname, "..", "..", "..", img);
+      if (fs.existsSync(filePath)) {
+        try {
+          fs.unlinkSync(filePath);
+        } catch (err) {
+          console.warn("Failed to delete image:", filePath);
+        }
+      }
+    }
+
+    // ✅ Add new uploaded images
+    if (req.files && req.files.length > 0) {
+      const newImages = req.files.map(
+        (file) => `${process.env.FILE_PATH}${file.filename}`
+      );
+      finalImages = [...finalImages, ...newImages];
+    }
+
+    // ✅ Save as JSON string (consistent with product API)
+    review.images = JSON.stringify(finalImages);
 
     await review.save();
 
-
+    // ✅ Fetch updated review
     const updatedReview = await ProductReview.findByPk(id, {
       include: [
         {
@@ -441,20 +498,32 @@ exports.updateReview = async (req, res) => {
       ]
     });
 
-    res.status(200).json({
+    // ✅ Parse images before sending
+    if (updatedReview.images) {
+      try {
+        updatedReview.images = JSON.parse(updatedReview.images);
+      } catch {
+        updatedReview.images = [];
+      }
+    }
+
+    return res.status(200).json({
       success: true,
       message: "Review updated successfully",
       data: updatedReview
     });
+
   } catch (error) {
     console.error("Update Review Error:", error);
-    if (error.name === 'SequelizeValidationError') {
+
+    if (error.name === "SequelizeValidationError") {
       return res.status(400).json({
         success: false,
         message: error.errors[0].message
       });
     }
-    res.status(500).json({
+
+    return res.status(500).json({
       success: false,
       message: "Internal server error occurred while updating review"
     });
