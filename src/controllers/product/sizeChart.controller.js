@@ -59,7 +59,11 @@ const getSizeChartById = async (req, res) => {
       });
     }
 
-    const sizeChart = await ProductSizeChart.findByPk(id, {
+    
+    const sizeChart = await ProductSizeChart.findOne({
+      where: {
+        categoryId: id
+      },
       include: [
         {
           model: ProductCategory,
@@ -67,6 +71,7 @@ const getSizeChartById = async (req, res) => {
           attributes: ['id', 'name']
         }
       ]
+    
     });
 
     if (!sizeChart) {

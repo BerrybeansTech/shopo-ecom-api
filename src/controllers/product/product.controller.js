@@ -14,6 +14,7 @@ const ProductSizeVariation = require("../../models/product/product-sizeVariation
 const ProductOccasion = require("../../models/product/product-Occasion.model");
 // const ProductSubCategory = require("../models/productSubCategory.model");
 const ProductReview = require("../../models/product/product-review");
+const OrderItems = require("../../models/orders/orderItems.model");
 
 const getAllProduct = async (req, res) => {
   try {
@@ -33,8 +34,9 @@ const getAllProduct = async (req, res) => {
       minPrice,
       maxPrice,
       newArrival,
+      bestSeller,
       sort = "createdAt",
-      sortingOrder = "DESC",
+      sortingOrder = "DESC"
     } = req.query;
 
     const host = req.get("host").split(":")[0];
@@ -46,10 +48,7 @@ const getAllProduct = async (req, res) => {
     const whereClause = {};
 
     if (name) whereClause.name = { [Op.like]: `%${name}%` };
-    if (seasonal) {
-      const seasonalArray = seasonal.split(",").map((id) => Number(id.trim()));
-      whereClause.seasonal = { [Op.in]: seasonalArray };
-    }
+    if (seasonal) whereClause.seasonal = { [Op.like]: `%${seasonal}%` };
     if (status) whereClause.status = status;
     if (fitType) {
       const fitTypeArray = fitType.split(",").map((id) => Number(id.trim()));
@@ -75,15 +74,11 @@ const getAllProduct = async (req, res) => {
     }
 
     if (subCategory) {
-      const subCategoryArray = subCategory
-        .split(",")
-        .map((id) => Number(id.trim()));
+      const subCategoryArray = subCategory.split(",").map((id) => Number(id.trim()));
       whereClause.subCategoryId = { [Op.in]: subCategoryArray };
     }
     if (childCategory) {
-      const childCategoryArray = childCategory
-        .split(",")
-        .map((id) => Number(id.trim()));
+      const childCategoryArray = childCategory.split(",").map((id) => Number(id.trim()));
       whereClause.childCategoryId = { [Op.in]: childCategoryArray };
     }
 
@@ -117,25 +112,13 @@ const getAllProduct = async (req, res) => {
     if (productSizeArray && productSizeArray.length) {
       const jsonSizes = JSON.stringify(productSizeArray);
       const sizeRows = await ProductSizeVariation.findAll({
-        where: where(
-          fn("JSON_OVERLAPS", col("size"), literal(`'${jsonSizes}'`)),
-          true
-        ),
+        where: where(fn("JSON_OVERLAPS", col("size"), literal(`'${jsonSizes}'`)), true),
         attributes: ["id"],
       });
       matchingSizeIds = sizeRows.map((r) => r.id);
       // if no matching size variations, return early with empty result
       if (!matchingSizeIds.length) {
-        return res.json({
-          success: true,
-          data: [],
-          pagination: {
-            total: 0,
-            page: 1,
-            limit: parseInt(req.query.limit) || 10,
-            totalPages: 0,
-          },
-        });
+        return res.json({ success: true, data: [], pagination: { total: 0, page: 1, limit: parseInt(req.query.limit) || 10, totalPages: 0 } });
       }
     }
 
@@ -147,16 +130,7 @@ const getAllProduct = async (req, res) => {
       });
       matchingColorIds = colorRows.map((r) => r.id);
       if (!matchingColorIds.length) {
-        return res.json({
-          success: true,
-          data: [],
-          pagination: {
-            total: 0,
-            page: 1,
-            limit: parseInt(req.query.limit) || 10,
-            totalPages: 0,
-          },
-        });
+        return res.json({ success: true, data: [], pagination: { total: 0, page: 1, limit: parseInt(req.query.limit) || 10, totalPages: 0 } });
       }
     }
 
@@ -165,109 +139,84 @@ const getAllProduct = async (req, res) => {
     // - minAvgRating=4
     // - minReviewCount=10
     // - ratingCount[5]=3  (number of 5-star reviews >= 3)
-    const minAvgRating = req.query.minAvgRating
-      ? parseFloat(req.query.minAvgRating)
-      : null;
-    const minReviewCount = req.query.minReviewCount
-      ? parseInt(req.query.minReviewCount, 10)
-      : null;
+    const minAvgRating = req.query.minAvgRating ? parseFloat(req.query.minAvgRating) : null;
+    const minReviewCount = req.query.minReviewCount ? parseInt(req.query.minReviewCount, 10) : null;
 
     // ratingCount can be parsed as an object like { '5': '3' }
     const ratingCountFilters = {};
-    if (req.query.ratingCount && typeof req.query.ratingCount === "object") {
+    if (req.query.ratingCount && typeof req.query.ratingCount === 'object') {
       for (const k of Object.keys(req.query.ratingCount)) {
         const star = parseInt(k, 10);
         const val = parseInt(req.query.ratingCount[k], 10);
-        if (!Number.isNaN(star) && !Number.isNaN(val))
-          ratingCountFilters[star] = val;
+        if (!Number.isNaN(star) && !Number.isNaN(val)) ratingCountFilters[star] = val;
       }
     }
 
     // New: Multi-select rating filter (e.g. rating=3,4,5) checks average rating floor
     let ratingArray = null;
     if (req.query.rating) {
-      ratingArray = req.query.rating
-        .split(",")
-        .map((r) => parseInt(r.trim(), 10))
-        .filter((n) => !Number.isNaN(n));
+      ratingArray = req.query.rating.split(",").map(r => parseInt(r.trim(), 10)).filter(n => !Number.isNaN(n));
     }
 
-    const hasReviewFilters =
-      minAvgRating !== null ||
-      minReviewCount !== null ||
-      Object.keys(ratingCountFilters).length > 0 ||
-      (ratingArray && ratingArray.length > 0);
+    const hasReviewFilters = (minAvgRating !== null) || (minReviewCount !== null) || Object.keys(ratingCountFilters).length > 0 || (ratingArray && ratingArray.length > 0);
     if (hasReviewFilters) {
       // Build aggregation attributes
       const reviewAttrs = [
-        "productId",
-        [fn("AVG", col("rating")), "avgRating"],
-        [fn("COUNT", col("rating")), "reviewCount"],
+        'productId',
+        [fn('AVG', col('rating')), 'avgRating'],
+        [fn('COUNT', col('rating')), 'reviewCount'],
       ];
       for (const starStr of Object.keys(ratingCountFilters)) {
         const star = parseInt(starStr, 10);
         // SUM(CASE WHEN rating = X THEN 1 ELSE 0 END) as rating_X_count
         reviewAttrs.push([
-          fn("SUM", literal(`CASE WHEN rating = ${star} THEN 1 ELSE 0 END`)),
+          fn('SUM', literal(`CASE WHEN rating = ${star} THEN 1 ELSE 0 END`)),
           `rating_${star}_count`,
         ]);
       }
 
       const aggregated = await ProductReview.findAll({
         attributes: reviewAttrs,
-        group: ["productId"],
+        group: ['productId'],
       });
 
-      const matchingFromReviews = aggregated
-        .filter((r) => {
-          const dv = r.toJSON();
-          const avg = parseFloat(dv.avgRating || 0);
+      const matchingFromReviews = aggregated.filter((r) => {
+        const dv = r.toJSON();
+        const avg = parseFloat(dv.avgRating || 0);
 
-          if (ratingArray && ratingArray.length > 0) {
-            const floorAvg = Math.floor(avg);
-            // If user selects 4, it matches 4.0 to 4.9.
-            // If 5, matches 5.0.
-            // If the product has 0 reviews (avg 0), floor is 0.
-            if (!ratingArray.includes(floorAvg)) return false;
-          }
+        if (ratingArray && ratingArray.length > 0) {
+          const floorAvg = Math.floor(avg);
+          // If user selects 4, it matches 4.0 to 4.9.
+          // If 5, matches 5.0. 
+          // If the product has 0 reviews (avg 0), floor is 0.
+          if (!ratingArray.includes(floorAvg)) return false;
+        }
 
-          if (minAvgRating !== null) {
-            if (avg < minAvgRating) return false;
-          }
-          if (minReviewCount !== null) {
-            const cnt = parseInt(dv.reviewCount || 0, 10);
-            if (cnt < minReviewCount) return false;
-          }
-          for (const starStr of Object.keys(ratingCountFilters)) {
-            const star = parseInt(starStr, 10);
-            const needed = ratingCountFilters[star];
-            const have = parseInt(dv[`rating_${star}_count`] || 0, 10);
-            if (have < needed) return false;
-          }
-          return true;
-        })
-        .map((r) => r.productId);
+        if (minAvgRating !== null) {
+          if (avg < minAvgRating) return false;
+        }
+        if (minReviewCount !== null) {
+          const cnt = parseInt(dv.reviewCount || 0, 10);
+          if (cnt < minReviewCount) return false;
+        }
+        for (const starStr of Object.keys(ratingCountFilters)) {
+          const star = parseInt(starStr, 10);
+          const needed = ratingCountFilters[star];
+          const have = parseInt(dv[`rating_${star}_count`] || 0, 10);
+          if (have < needed) return false;
+        }
+        return true;
+      }).map((r) => r.productId);
 
       if (!matchingFromReviews.length) {
-        return res.json({
-          success: true,
-          data: [],
-          pagination: {
-            total: 0,
-            page: 1,
-            limit: parseInt(req.query.limit) || 10,
-            totalPages: 0,
-          },
-        });
+        return res.json({ success: true, data: [], pagination: { total: 0, page: 1, limit: parseInt(req.query.limit) || 10, totalPages: 0 } });
       }
 
       // Apply as additional where clause (intersect with existing id filter if any)
       if (whereClause.id && whereClause.id[Op.in]) {
         // intersect two arrays
         const existingIds = whereClause.id[Op.in];
-        const intersect = existingIds.filter((id) =>
-          matchingFromReviews.includes(id)
-        );
+        const intersect = existingIds.filter((id) => matchingFromReviews.includes(id));
         whereClause.id = { [Op.in]: intersect };
       } else {
         whereClause.id = { [Op.in]: matchingFromReviews };
@@ -276,15 +225,15 @@ const getAllProduct = async (req, res) => {
 
     // --- Stock-based filtering (inStock=true|false) ---
     if (req.query.inStock !== undefined) {
-      const wantInStock = String(req.query.inStock).toLowerCase() === "true";
+      const wantInStock = String(req.query.inStock).toLowerCase() === 'true';
 
       // Aggregate inventory totals per product
       const invAgg = await ProductInventory.findAll({
         attributes: [
-          "productId",
-          [fn("SUM", col("availableQuantity")), "totalQty"],
+          'productId',
+          [fn('SUM', col('availableQuantity')), 'totalQty'],
         ],
-        group: ["productId"],
+        group: ['productId'],
       });
 
       const invMap = invAgg.reduce((acc, row) => {
@@ -304,33 +253,19 @@ const getAllProduct = async (req, res) => {
         const zeroIds = invIds.filter((id) => invMap[id] === 0);
         // products without any inventory rows
         const noInvWhere = invIds.length ? { id: { [Op.notIn]: invIds } } : {};
-        const noInvProducts = await Product.findAll({
-          where: noInvWhere,
-          attributes: ["id"],
-        });
+        const noInvProducts = await Product.findAll({ where: noInvWhere, attributes: ['id'] });
         const noInvIds = noInvProducts.map((p) => p.id);
         matchingStockIds = [...zeroIds, ...noInvIds];
       }
 
       if (!matchingStockIds.length) {
-        return res.json({
-          success: true,
-          data: [],
-          pagination: {
-            total: 0,
-            page: 1,
-            limit: parseInt(req.query.limit) || 10,
-            totalPages: 0,
-          },
-        });
+        return res.json({ success: true, data: [], pagination: { total: 0, page: 1, limit: parseInt(req.query.limit) || 10, totalPages: 0 } });
       }
 
       // intersect with existing id filter if present
       if (whereClause.id && whereClause.id[Op.in]) {
         const existingIds = whereClause.id[Op.in];
-        const intersect = existingIds.filter((id) =>
-          matchingStockIds.includes(id)
-        );
+        const intersect = existingIds.filter((id) => matchingStockIds.includes(id));
         whereClause.id = { [Op.in]: intersect };
       } else {
         whereClause.id = { [Op.in]: matchingStockIds };
@@ -417,10 +352,8 @@ const getAllProduct = async (req, res) => {
           // apply inventory-level where using resolved variation ids
           where: (function () {
             const w = {};
-            if (matchingColorIds && matchingColorIds.length)
-              w.productColorVariationId = { [Op.in]: matchingColorIds };
-            if (matchingSizeIds && matchingSizeIds.length)
-              w.productSizeVariationId = { [Op.in]: matchingSizeIds };
+            if (matchingColorIds && matchingColorIds.length) w.productColorVariationId = { [Op.in]: matchingColorIds };
+            if (matchingSizeIds && matchingSizeIds.length) w.productSizeVariationId = { [Op.in]: matchingSizeIds };
             return Object.keys(w).length ? w : undefined;
           })(),
           include: [
@@ -436,10 +369,7 @@ const getAllProduct = async (req, res) => {
             },
           ],
           attributes: ["id", "availableQuantity"],
-          required: !!(
-            (matchingColorIds && matchingColorIds.length) ||
-            (matchingSizeIds && matchingSizeIds.length)
-          ),
+          required: !!((matchingColorIds && matchingColorIds.length) || (matchingSizeIds && matchingSizeIds.length)),
         },
       ],
       // group: ["Product.id"],
@@ -447,6 +377,39 @@ const getAllProduct = async (req, res) => {
       order: [[sort, sortingOrder]],
     };
 
+
+    if (bestSeller) {
+      const bestSelling = await OrderItems.findAll({
+        attributes: [
+          "productId",
+          [fn("SUM", col("quantity")), "totalSold"]
+        ],
+        where: {
+          productId: { [Op.ne]: null }
+        },
+        group: ["productId"],
+        order: [[literal("totalSold"), "DESC"]],
+        limit: 6,
+      });
+
+      const bestSellerIds = bestSelling
+        .map(item => item.productId)
+        .filter(Boolean); 
+
+      if (!bestSellerIds.length) {
+        return res.json({
+          success: true,
+          data: [],
+          pagination: { total: 0, page: 1, limit: 10, totalPages: 0 }
+        });
+      }
+
+      whereClause.id = { [Op.in]: bestSellerIds };
+
+      queryOptions.order = [
+        [literal(`FIELD(Product.id, ${bestSellerIds.join(",")})`)]
+      ];
+    }
     if (newArrival) {
       queryOptions.where.status = "approved";
       queryOptions.limit = 5;
@@ -468,6 +431,8 @@ const getAllProduct = async (req, res) => {
           galleryArray = Array.isArray(data.galleryImage)
             ? data.galleryImage
             : JSON.parse(data.galleryImage);
+
+          console.log(galleryArray, "galleryArrayyyyyyyyyyyyyyyyyyyyyyyyyyy");
         } catch {
           galleryArray = [];
         }
@@ -542,13 +507,13 @@ const getAllProduct = async (req, res) => {
       ...(newArrival
         ? {}
         : {
-            pagination: {
-              total: count,
-              page,
-              limit,
-              totalPages: Math.ceil(count / limit),
-            },
-          }),
+          pagination: {
+            total: count,
+            page,
+            limit,
+            totalPages: Math.ceil(count / limit),
+          },
+        }),
     });
   } catch (error) {
     console.error("Error retrieving products:", error);
@@ -802,8 +767,8 @@ const createProduct = async (req, res) => {
 
     const galleryImage = req.files?.galleryImage
       ? req.files.galleryImage.map(
-          (file) => `${process.env.FILE_PATH}${file.filename}`
-        )
+        (file) => `${process.env.FILE_PATH}${file.filename}`
+      )
       : [];
 
     let parsedApparelDetails = {};
@@ -827,7 +792,7 @@ const createProduct = async (req, res) => {
         subCategoryId,
         childCategoryId,
         productMaterialId: parsedApparelDetails.productMaterialId,
-        fitType: parsedApparelDetails.fitType,
+        fitTypeId: parsedApparelDetails.fitType,
         occasionId: parsedApparelDetails.occasionId,
         seasonal: parsedApparelDetails.seasonal,
         mrp: parseFloat(mrp),
@@ -899,87 +864,122 @@ const createProduct = async (req, res) => {
   }
 };
 
-const updateProduct = async (req, res) => {
-  let {
-    id,
-    name,
-    description,
-    metaTitle,
-    metaDescription,
-    careInstructions,
-    categoryId,
-    subCategoryId,
-    childCategoryId,
-    aparelDetials,
-    inventory,
-    mrp,
-    sellingPrice,
-    gst,
-    oldGalleryImage = [],
-  } = req.body;
 
+const updateProduct = async (req, res) => {
   try {
-    console.log(
-      "typeof oldGalleryImage",
-      typeof oldGalleryImage,
-      oldGalleryImage
-    );
-    if (typeof oldGalleryImage == "string") {
+    // ✅ Extract & validate ID
+    const id = parseInt(req.body.id);
+    if (!id) {
+      return res.status(400).json({
+        success: false,
+        message: "Invalid or missing product ID",
+      });
+    }
+
+    let {
+      name,
+      description,
+      metaTitle,
+      metaDescription,
+      careInstructions,
+      categoryId,
+      subCategoryId,
+      childCategoryId,
+      aparelDetials,
+      inventory,
+      mrp,
+      sellingPrice,
+      gst,
+      oldGalleryImage = [],
+    } = req.body;
+
+    // ✅ Convert oldGalleryImage to array
+    if (typeof oldGalleryImage === "string") {
       try {
         oldGalleryImage = JSON.parse(oldGalleryImage);
-      } catch (err) {
+      } catch {
         oldGalleryImage = [];
       }
     }
+
+    // ✅ Normalize paths
     oldGalleryImage = oldGalleryImage.map((img) => {
-      const uploadIndex = img.indexOf("uploads/");
-      return uploadIndex !== -1 ? img.slice(uploadIndex) : img;
+      const index = img.indexOf("uploads/");
+      return index !== -1 ? img.slice(index) : img;
     });
 
+    // ✅ Find product
     const existing = await Product.findByPk(id);
-
     if (!existing) {
-      return res.status(404).json({ message: "Product not found" });
+      return res.status(404).json({
+        success: false,
+        message: "Product not found",
+      });
     }
-    console.log(
-      "oldGalleryImage>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>",
-      oldGalleryImage
-    );
-    let thumbnailImage = existing.thumbnailImage;
-    let galleryImage = [...oldGalleryImage];
-    console.log(
-      "galleryImage<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<",
-      galleryImage
-    );
 
-    const removedImages = (existing.galleryImage || []).filter(
+    // ✅ Convert existing galleryImage to array
+    let existingGallery = existing.galleryImage || [];
+
+    if (typeof existingGallery === "string") {
+      try {
+        existingGallery = JSON.parse(existingGallery);
+      } catch {
+        existingGallery = existingGallery.split(",");
+      }
+    }
+
+    if (!Array.isArray(existingGallery)) {
+      existingGallery = [];
+    }
+
+    // ✅ Start with old images
+    let galleryImage = [...oldGalleryImage];
+
+    // ✅ Find removed images
+    const removedImages = existingGallery.filter(
       (img) => !oldGalleryImage.includes(img)
     );
 
+    // ✅ Delete removed images
     for (const img of removedImages) {
-      const oldGalleryPath = path.join(__dirname, "..", img);
-      if (fs.existsSync(oldGalleryPath)) {
-        fs.unlinkSync(oldGalleryPath);
+      const filePath = path.join(__dirname, "..", img);
+      if (fs.existsSync(filePath)) {
+        try {
+          fs.unlinkSync(filePath);
+        } catch (err) {
+          console.warn("Failed to delete:", filePath);
+        }
       }
     }
 
+    // ✅ Add new gallery images
     if (req.files?.galleryImage?.length > 0) {
-      const newGalleryImages = req.files.galleryImage.map(
+      const newImages = req.files.galleryImage.map(
         (file) => `${process.env.FILE_PATH}${file.filename}`
       );
-      galleryImage = [...galleryImage, ...newGalleryImages];
+      galleryImage = [...galleryImage, ...newImages];
     }
 
+    // ✅ Handle thumbnail
+    let thumbnailImage = existing.thumbnailImage;
+
     if (req.files?.thumbnailImage?.[0]) {
+      // delete old thumbnail
       if (thumbnailImage) {
         const oldThumbPath = path.join(__dirname, "..", thumbnailImage);
         if (fs.existsSync(oldThumbPath)) {
-          fs.unlinkSync(oldThumbPath);
+          try {
+            fs.unlinkSync(oldThumbPath);
+          } catch (err) {
+            console.warn("Failed to delete thumbnail:", oldThumbPath);
+          }
         }
       }
+
       thumbnailImage = `${process.env.FILE_PATH}${req.files.thumbnailImage[0].filename}`;
     }
 
+    // ✅ Save (store gallery as JSON string)
     await Product.update(
       {
         name,
@@ -996,17 +996,27 @@ const updateProduct = async (req, res) => {
         sellingPrice,
         gst,
         thumbnailImage,
-        galleryImage,
+        galleryImage: JSON.stringify(galleryImage),
       },
       { where: { id } }
     );
 
-    res.json({ success: true, message: "Product updated successfully" });
+    return res.json({
+      success: true,
+      message: "Product updated successfully",
+      data: {
+        id,
+        thumbnailImage,
+        galleryImage,
+      },
+    });
   } catch (error) {
     console.error("Error updating Product:", error);
-    res.status(500).json({
+
+    return res.status(500).json({
       success: false,
       message: "Failed to update Product",
+      error: error.message,
     });
   }
 };
