@@ -539,7 +539,7 @@ const deleteCustomers = async (req, res) => {
   }
 };
 
-const getUserWishlist =  async (req, res) => {
+const getUserWishlist = async (req, res) => {
   const { id } = req.params;
 
   try {
@@ -548,18 +548,26 @@ const getUserWishlist =  async (req, res) => {
     if (!user) {
       return res.status(201).json({ success: false, error: "User not found" });
     }
-    console.log("Fetched users:", user);
+    console.log("Fetched user wishlist:", user.wishList);
+
+    let wishList = user.wishList;
+    if (typeof wishList === "string") {
+      try {
+        wishList = JSON.parse(wishList);
+      } catch (e) {
+        wishList = [];
+      }
+    }
 
     res.status(200).json({
       success: true,
-      wishList: user.wishList,
+      wishList: Array.isArray(wishList) ? wishList : [],
     });
   } catch (err) {
-    console.error("Error fetching users by type:", err);
-    res.status(500).json({ success: false, message: "Error fetching users" });
+    console.error("Error fetching wishlist:", err);
+    res.status(500).json({ success: false, message: "Error fetching wishlist" });
   }
-}
-
+};
 
 const updateWishlist = async (req, res) => {
   const { userId, productId } = req.body;
@@ -577,7 +585,18 @@ const updateWishlist = async (req, res) => {
       return res.status(404).json({ success: false, error: "User not found" });
     }
 
-    const currentList = Array.isArray(user.wishList) ? user.wishList : [];
+    let currentList = user.wishList;
+    if (typeof currentList === "string") {
+      try {
+        currentList = JSON.parse(currentList);
+      } catch (e) {
+        currentList = [];
+      }
+    }
+    
+    if (!Array.isArray(currentList)) {
+      currentList = [];
+    }
 
     const updatedWishList = currentList.includes(productId)
       ? currentList.filter((id) => id !== productId)
