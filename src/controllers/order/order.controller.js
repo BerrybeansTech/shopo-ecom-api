@@ -21,8 +21,9 @@ const getAllOrders = async (req, res) => {
     if (status) whereClause.status = status;
     if (customerId) whereClause.customerId = customerId;
 
-    const host = req.get("host").split(":")[0];
-    const baseUrl = `${req.protocol}://${host}/`;
+    const host = req.get("host");
+    const protocol = host && host.includes("localhost") ? req.protocol : "https";
+    const baseUrl = `${protocol}://${host}/`;
 
     const { count, rows } = await Orders.findAndCountAll({
       where: whereClause,
@@ -55,21 +56,26 @@ const getAllOrders = async (req, res) => {
           let galleryArray = [];
           if (item.Product.galleryImage) {
             try {
-              galleryArray = Array.isArray(item.Product.galleryImage)
+              const rawGallery = Array.isArray(item.Product.galleryImage)
                 ? item.Product.galleryImage
                 : JSON.parse(item.Product.galleryImage);
+              
+              galleryArray = (Array.isArray(rawGallery) ? rawGallery : [rawGallery])
+                .flatMap(i => typeof i === "string" ? i.split(",") : i)
+                .filter(Boolean);
             } catch (err) {
-              console.error("Invalid galleryImage JSON:", item.Product.galleryImage);
-              galleryArray = [];
+              galleryArray = typeof item.Product.galleryImage === "string" 
+                ? item.Product.galleryImage.split(",").filter(Boolean) 
+                : [];
             }
           }
 
           item.Product.thumbnailImage = item.Product.thumbnailImage
-            ? `${baseUrl}${item.Product.thumbnailImage}`
+            ? `${baseUrl}${item.Product.thumbnailImage.replace(/[\\\[\]"]/g, "").replace(/^[\\\/]+/, "")}`
             : null;
 
           item.Product.galleryImage = galleryArray.map(
-            img => `${baseUrl}${img}`
+            img => `${baseUrl}${img.replace(/[\\\[\]"]/g, "").replace(/^[\\\/]+/, "")}`
           );
         }
         return item;
@@ -109,8 +115,9 @@ const getCustomerOrder = async (req, res) => {
     const limit = parseInt(limitQuery) || 10;
     const offset = (page - 1) * limit;
 
-    const host = req.get("host").split(":")[0];
-    const baseUrl = `${req.protocol}://${host}/`;
+    const host = req.get("host");
+    const protocol = host && host.includes("localhost") ? req.protocol : "https";
+    const baseUrl = `${protocol}://${host}/`;
 
     const { count, rows } = await Orders.findAndCountAll({
       where: { customerId: id },
@@ -143,21 +150,26 @@ const getCustomerOrder = async (req, res) => {
           let galleryArray = [];
           if (item.Product.galleryImage) {
             try {
-              galleryArray = Array.isArray(item.Product.galleryImage)
+              const rawGallery = Array.isArray(item.Product.galleryImage)
                 ? item.Product.galleryImage
                 : JSON.parse(item.Product.galleryImage);
+              
+              galleryArray = (Array.isArray(rawGallery) ? rawGallery : [rawGallery])
+                .flatMap(i => typeof i === "string" ? i.split(",") : i)
+                .filter(Boolean);
             } catch (err) {
-              console.error("Invalid galleryImage JSON:", item.Product.galleryImage);
-              galleryArray = [];
+              galleryArray = typeof item.Product.galleryImage === "string" 
+                ? item.Product.galleryImage.split(",").filter(Boolean) 
+                : [];
             }
           }
 
           item.Product.thumbnailImage = item.Product.thumbnailImage
-            ? `${baseUrl}${item.Product.thumbnailImage}`
+            ? `${baseUrl}${item.Product.thumbnailImage.replace(/[\\\[\]"]/g, "").replace(/^[\\\/]+/, "")}`
             : null;
 
           item.Product.galleryImage = galleryArray.map(
-            img => `${baseUrl}${img}`
+            img => `${baseUrl}${img.replace(/[\\\[\]"]/g, "").replace(/^[\\\/]+/, "")}`
           );
         }
         return item;
@@ -193,8 +205,9 @@ const getOrderDetial = async (req, res) => {
   try {
     const { id } = req.params;
 
-    const host = req.get("host").split(":")[0];
-    const baseUrl = `${req.protocol}://${host}/`;
+    const host = req.get("host");
+    const protocol = host && host.includes("localhost") ? req.protocol : "https";
+    const baseUrl = `${protocol}://${host}/`;
 
     const order = await Orders.findByPk(id, {
       include: [
@@ -239,11 +252,11 @@ const getOrderDetial = async (req, res) => {
         }
 
         item.Product.thumbnailImage = item.Product.thumbnailImage
-          ? `${baseUrl}${item.Product.thumbnailImage}`
+          ? `${baseUrl}${item.Product.thumbnailImage.replace(/[\\\[\]"]/g, "").replace(/^[\\\/]+/, "")}`
           : null;
 
         item.Product.galleryImage = galleryArray.map(
-          img => `${baseUrl}${img}`
+          img => `${baseUrl}${img.replace(/[\\\[\]"]/g, "").replace(/^[\\\/]+/, "")}`
         );
       }
       return item;

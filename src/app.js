@@ -30,8 +30,10 @@ const corsOptions = {
 app.use(cors(corsOptions));
 app.use(bodyParser.json());
 app.use(morgan("dev"));
-app.use(cookieParser()); 
+app.use(cookieParser());
 app.use(apiRateLimiter);
+app.use("/uploads", express.static("uploads"));
+
 
 // Routes
 app.use("/customer", customerRoutes);

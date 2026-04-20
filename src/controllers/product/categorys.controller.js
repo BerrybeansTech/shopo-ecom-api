@@ -13,8 +13,7 @@ const buildBaseUrl = (req) => {
   }
   const host = req.get("host");
   if (!host) return "";
-  host = host.split(":")[0];
-  const protocol = req.protocol || "http";
+  const protocol = host.includes("localhost") ? (req.protocol || "http") : "https";
   return ensureTrailingSlash(`${protocol}://${host}`);
 };
 
@@ -27,7 +26,7 @@ const buildFileUrl = (req, filePath) => {
   if (!baseUrl) {
     return filePath;
   }
-  const normalizedPath = filePath.replace(/^\/+/, "");
+  const normalizedPath = filePath.replace(/[\\\[\]"]/g, "").replace(/^[\\\/]+/, "");
   return `${baseUrl}${normalizedPath}`;
 };
 
@@ -47,7 +46,7 @@ exports.createCategory = async (req, res) => {
 
     let image = null;
     if (req.file) {
-      image = `${process.env.FILE_PATH}${req.file.filename}`;
+      image = `${(process.env.FILE_PATH || "").replace(/[\\\[\]"]/g, "")}${req.file.filename.replace(/[\\\[\]"]/g, "")}`;
     }
 
     const category = await ProductCategory.create({ name: name.trim(), image });
@@ -65,8 +64,9 @@ exports.createCategory = async (req, res) => {
 
 exports.getAllCategories = async (req, res) => {
   try {
-    const host = req.get("host").split(":")[0];
-    const baseUrl = `${req.protocol}://${host}/`;
+    const host = req.get("host");
+    const protocol = host && host.includes("localhost") ? req.protocol : "https";
+    const baseUrl = `${protocol}://${host}/`;
 
     const categories = await ProductCategory.findAll({
       include: [
@@ -85,7 +85,7 @@ exports.getAllCategories = async (req, res) => {
       const categoryJson = category.toJSON();
 
       categoryJson.image = categoryJson.image
-        ? `${baseUrl}${categoryJson.image}`
+        ? `${baseUrl}${categoryJson.image.replace(/[\\\[\]"]/g, "").replace(/^[\\\/]+/, "")}`
         : null;
 
       return categoryJson;
@@ -154,7 +154,7 @@ exports.updateCategory = async (req, res) => {
     }
 
     if (req.file) {
-      category.image = `${process.env.FILE_PATH}${req.file.filename}`;
+      category.image = `${(process.env.FILE_PATH || "").replace(/[\\\[\]"]/g, "")}${req.file.filename.replace(/[\\\[\]"]/g, "")}`;
     }
 
     await category.save();
@@ -263,8 +263,9 @@ exports.getCategoryById = async (req, res) => {
       });
     }
 
-    const host = req.get("host").split(":")[0];
-    const baseUrl = `${req.protocol}://${host}/`;
+    const host = req.get("host");
+    const protocol = host && host.includes("localhost") ? req.protocol : "https";
+    const baseUrl = `${protocol}://${host}/`;
 
     const category = await ProductCategory.findByPk(id, {
       include: [
@@ -288,7 +289,7 @@ exports.getCategoryById = async (req, res) => {
     const categoryJson = category.toJSON();
 
     categoryJson.image = categoryJson.image
-      ? `${baseUrl}${categoryJson.image}`
+      ? `${baseUrl}${categoryJson.image.replace(/[\\\[\]"]/g, "").replace(/^[\\\/]+/, "")}`
       : null;
 
     res.status(200).json({

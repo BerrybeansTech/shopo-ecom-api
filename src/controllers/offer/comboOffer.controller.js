@@ -18,7 +18,9 @@ const getAllComboOffer = async (req, res) => {
       whereClause.status = status;
     }
 
-    const baseUrl = `${req.protocol}://${req.get("host")}/`;
+    const host = req.get("host");
+    const protocol = host && host.includes("localhost") ? req.protocol : "https";
+    const baseUrl = `${protocol}://${host}/`;
 
     const page = parseInt(req.query.page) || 1;
     const limit = parseInt(req.query.limit) || 10;
@@ -32,12 +34,16 @@ const getAllComboOffer = async (req, res) => {
     });
 
     const data = rows.map((item) => {
-      const bannerImage = item.bannerImage
-        ? `${baseUrl}${
-            Array.isArray(item.bannerImage)
-              ? item.bannerImage[0]
-              : item.bannerImage
-          }`
+      let bannerPath = Array.isArray(item.bannerImage) ? item.bannerImage[0] : item.bannerImage;
+      if (typeof bannerPath === 'string' && bannerPath.startsWith('[')) {
+        try {
+          const parsed = JSON.parse(bannerPath);
+          bannerPath = Array.isArray(parsed) ? parsed[0] : parsed;
+        } catch (e) {}
+      }
+
+      const bannerImage = bannerPath
+        ? `${baseUrl}${bannerPath.replace(/[\\\[\]"]/g, "").replace(/^[\\\/]+/, "")}`
         : null;
 
       return {
@@ -69,7 +75,9 @@ const getComboOfferById = async (req, res) => {
   const { id } = req.params;
 
   try {
-    const baseUrl = `${req.protocol}://${req.get("host")}/`;
+    const host = req.get("host");
+    const protocol = host && host.includes("localhost") ? req.protocol : "https";
+    const baseUrl = `${protocol}://${host}/`;
 
     const offer = await comboOffer.findOne({ where: { id } });
 
@@ -80,12 +88,16 @@ const getComboOfferById = async (req, res) => {
       });
     }
 
-    const bannerImage = offer.bannerImage
-      ? `${baseUrl}${
-          Array.isArray(offer.bannerImage)
-            ? offer.bannerImage[0]
-            : offer.bannerImage
-        }`
+    let bannerPath = Array.isArray(offer.bannerImage) ? offer.bannerImage[0] : offer.bannerImage;
+    if (typeof bannerPath === 'string' && bannerPath.startsWith('[')) {
+      try {
+        const parsed = JSON.parse(bannerPath);
+        bannerPath = Array.isArray(parsed) ? parsed[0] : parsed;
+      } catch (e) {}
+    }
+
+    const bannerImage = bannerPath
+      ? `${baseUrl}${bannerPath.replace(/[\\\[\]"]/g, "").replace(/^[\\\/]+/, "")}`
       : null;
 
     res.json({
@@ -117,7 +129,7 @@ const createComboOffer = async (req, res) => {
   } = req.body;
 
   const bannerImage = req.files?.bannerImage?.[0]
-    ? `${process.env.FILE_PATH}${req.files.bannerImage[0].filename}`
+    ? `${(process.env.FILE_PATH || "").replace(/[\\\[\]"]/g, "")}${req.files.bannerImage[0].filename.replace(/[\\\[\]"]/g, "")}`
     : null;
 
   try {
@@ -133,10 +145,19 @@ const createComboOffer = async (req, res) => {
       bannerImage,
     });
 
+    const host = req.get("host");
+    const protocol = host && host.includes("localhost") ? req.protocol : "https";
+    const baseUrl = `${protocol}://${host}/`;
+
+    const cleanedOffer = newOffer.toJSON();
+    cleanedOffer.bannerImage = cleanedOffer.bannerImage
+      ? `${baseUrl}${cleanedOffer.bannerImage.replace(/[\\\[\]"]/g, "").replace(/^[\\\/]+/, "")}`
+      : null;
+
     res.json({
       success: true,
       message: "Combo offer created successfully",
-      data: newOffer,
+      data: cleanedOffer,
     });
   } catch (error) {
     console.error("Error creating combo offer:", error);
@@ -178,7 +199,7 @@ const updateComboOffer = async (req, res) => {
         if (fs.existsSync(oldPath)) fs.unlinkSync(oldPath);
       }
 
-      bannerImage = `${process.env.FILE_PATH}${req.files.bannerImage[0].filename}`;
+      bannerImage = `${(process.env.FILE_PATH || "").replace(/[\\\[\]"]/g, "")}${req.files.bannerImage[0].filename.replace(/[\\\[\]"]/g, "")}`;
     }
 
     await comboOffer.update(
@@ -196,9 +217,17 @@ const updateComboOffer = async (req, res) => {
       { where: { id } }
     );
 
+    const host = req.get("host");
+    const protocol = host && host.includes("localhost") ? req.protocol : "https";
+    const baseUrl = `${protocol}://${host}/`;
+
     res.json({
       success: true,
       message: "Combo offer updated successfully",
+      data: {
+        id,
+        bannerImage: bannerImage ? `${baseUrl}${bannerImage.replace(/[\\\[\]"]/g, "").replace(/^[\\\/]+/, "")}` : null,
+      }
     });
   } catch (error) {
     console.error("Error updating combo offer:", error);

@@ -57,7 +57,7 @@ exports.createReview = async (req, res) => {
 
     if (req.files && req.files.length > 0) {
       imagePaths = req.files.map(
-        (file) => `${process.env.FILE_PATH}${file.filename}`
+        (file) => `${(process.env.FILE_PATH || "").replace(/[\\\[\]"]/g, "")}${file.filename.replace(/[\\\[\]"]/g, "")}`
       );
     }
 
@@ -69,10 +69,23 @@ exports.createReview = async (req, res) => {
       images: JSON.stringify(imagePaths) // ✅ consistent storage
     });
 
+    const host = req.get("host");
+    const protocol = host && host.includes("localhost") ? req.protocol : "https";
+    const baseUrl = `${protocol}://${host}/`;
+
+    const cleanedReview = review.toJSON();
+    let imgArr = [];
+    try {
+      imgArr = JSON.parse(cleanedReview.images || "[]");
+    } catch { imgArr = []; }
+
+    cleanedReview.images = (Array.isArray(imgArr) ? imgArr : [])
+      .map(img => `${baseUrl}${img.replace(/[\\\[\]"]/g, "").replace(/^[\\\/]+/, "")}`);
+
     res.status(201).json({
       success: true,
       message: "Review created successfully",
-      data: review
+      data: cleanedReview
     });
 
   } catch (error) {
@@ -282,13 +295,25 @@ exports.getReviewsByProduct = async (req, res) => {
     }, { 1: 0, 2: 0, 3: 0, 4: 0, 5: 0 });
 
     // Format image URLs
-    const host = req.get("host").split(":")[0];
-    const baseUrl = `${req.protocol}://${host}/`;
+    const host = req.get("host");
+    const protocol = host && host.includes("localhost") ? req.protocol : "https";
+    const baseUrl = `${protocol}://${host}/`;
     const formattedReviews = reviews.map(review => {
       const data = review.toJSON();
-      if (data.images?.length > 0) {
-        data.images = data.images.map(img => `${baseUrl}${img}`);
-      } else data.images = [];
+      let reviewImages = data.images || [];
+      if (typeof reviewImages === 'string' && reviewImages.startsWith('[')) {
+        try {
+          reviewImages = JSON.parse(reviewImages);
+        } catch (e) {
+          reviewImages = [reviewImages];
+        }
+      } else if (typeof reviewImages === 'string') {
+        reviewImages = [reviewImages];
+      }
+
+      data.images = (Array.isArray(reviewImages) ? reviewImages : [])
+        .filter(img => typeof img === 'string')
+        .map(img => `${baseUrl}${img.replace(/[\\\[\]"]/g, "").replace(/^[\\\/]+/, "")}`);
       return data;
     });
 
@@ -474,7 +499,7 @@ exports.updateReview = async (req, res) => {
     // ✅ Add new uploaded images
     if (req.files && req.files.length > 0) {
       const newImages = req.files.map(
-        (file) => `${process.env.FILE_PATH}${file.filename}`
+        (file) => `${(process.env.FILE_PATH || "").replace(/[\\\[\]"]/g, "")}${file.filename.replace(/[\\\[\]"]/g, "")}`
       );
       finalImages = [...finalImages, ...newImages];
     }
@@ -507,10 +532,23 @@ exports.updateReview = async (req, res) => {
       }
     }
 
+    const host = req.get("host");
+    const protocol = host && host.includes("localhost") ? req.protocol : "https";
+    const baseUrl = `${protocol}://${host}/`;
+
+    const cleanedUpdate = updatedReview.toJSON();
+    let updImgArr = [];
+    try {
+      updImgArr = typeof cleanedUpdate.images === "string" ? JSON.parse(cleanedUpdate.images || "[]") : cleanedUpdate.images || [];
+    } catch { updImgArr = []; }
+
+    cleanedUpdate.images = (Array.isArray(updImgArr) ? updImgArr : [])
+      .map(img => `${baseUrl}${img.replace(/[\\\[\]"]/g, "").replace(/^[\\\/]+/, "")}`);
+
     return res.status(200).json({
       success: true,
       message: "Review updated successfully",
-      data: updatedReview
+      data: cleanedUpdate
     });
 
   } catch (error) {

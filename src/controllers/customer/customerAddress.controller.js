@@ -11,7 +11,9 @@ const getAllAddresses = async (req, res) => {
     if (city) whereClause.city = { [Op.like]: `%${city}%` };
     if (state) whereClause.state = { [Op.like]: `%${state}%` };
     if (country) whereClause.country = { [Op.like]: `%${country}%` };
-    if (customerId) whereClause.customerId = customerId;
+    // ✅ Use authenticated user ID if available
+    const effectiveCustomerId = customerId || (req.user ? req.user.id : null);
+    if (effectiveCustomerId) whereClause.customerId = effectiveCustomerId;
 
     const page = parseInt(req.query.page) || 1;
     const limit = parseInt(req.query.limit) || 10;
@@ -19,7 +21,7 @@ const getAllAddresses = async (req, res) => {
 
     const { count, rows } = await CustomerAddress.findAndCountAll({
       where: whereClause,
-      include: [{ model: Customer, attributes: ["id", "name", "email"] }],
+      include: [{ model: Customer, as: "customer", attributes: ["id", "name", "email"] }],
       limit,
       offset,
     });
@@ -45,9 +47,12 @@ const getAddressById = async (req, res) => {
   const { id } = req.params;
 
   try {
+    const whereClause = { id };
+    if (req.user) whereClause.customerId = req.user.id;
+
     const address = await CustomerAddress.findOne({
-      where: { id },
-      include: [{ model: Customer, attributes: ["id", "name", "email"] }]
+      where: whereClause,
+      include: [{ model: Customer, as: "customer", attributes: ["id", "name", "email"] }]
     });
 
     if (!address) {
@@ -63,12 +68,33 @@ const getAddressById = async (req, res) => {
 
 
 const createAddress = async (req, res) => {
-  const { customerId, name, phone, address, city, state, country, postalCode } = req.body;
-
   try {
+    const { customerId: bodyCustomerId, name, phone, address, city, state, country, postalCode, isDefault } = req.body;
+    
+    // ✅ Identify customer from body or authenticated user
+    const customerId = bodyCustomerId || (req.user ? req.user.id : null);
+
+    if (!customerId) {
+      return res.status(400).json({
+        success: false,
+        message: "Customer ID is required"
+      });
+    }
+
     const customerExists = await Customer.findByPk(customerId);
     if (!customerExists) {
-      return res.status(400).json({ success: false, message: "Customer does not exist" });
+      return res.status(404).json({ success: false, message: "Customer does not exist" });
+    }
+
+    // ✅ If this is the first address, or isDefault is true, handle it
+    const addressCount = await CustomerAddress.count({ where: { customerId } });
+    const setAsDefault = isDefault || addressCount === 0;
+
+    if (setAsDefault) {
+      await CustomerAddress.update(
+        { isDefault: false },
+        { where: { customerId } }
+      );
     }
 
     const newAddress = await CustomerAddress.create({
@@ -80,16 +106,21 @@ const createAddress = async (req, res) => {
       state,
       country,
       postalCode,
+      isDefault: setAsDefault
     });
 
-    res.json({
+    res.status(201).json({
       success: true,
       message: "Address created successfully",
       data: newAddress,
     });
   } catch (error) {
     console.error("Error creating address:", error);
-    res.status(500).json({ success: false, message: "Failed to create address" });
+    res.status(500).json({ 
+      success: false, 
+      message: "Failed to create address",
+      error: error.message 
+    });
   }
 };
 
@@ -98,10 +129,13 @@ const updateAddress = async (req, res) => {
   const { id, name, phone, address, city, state, country, postalCode, isDefault } = req.body;
 
   try {
-    const existing = await CustomerAddress.findByPk(id);
+    const whereClause = { id };
+    if (req.user) whereClause.customerId = req.user.id;
+
+    const existing = await CustomerAddress.findOne({ where: whereClause });
 
     if (!existing) {
-      return res.status(404).json({ success: false, message: "Address not found" });
+      return res.status(404).json({ success: false, message: "Address not found or unauthorized" });
     }
 
     if (isDefault) {
@@ -139,12 +173,15 @@ const deleteAddress = async (req, res) => {
   const { id } = req.params;
 
   try {
-    const existing = await CustomerAddress.findByPk(id);
+    const whereClause = { id };
+    if (req.user) whereClause.customerId = req.user.id;
+
+    const existing = await CustomerAddress.findOne({ where: whereClause });
     if (!existing) {
-      return res.status(404).json({ success: false, message: "Address not found" });
+      return res.status(404).json({ success: false, message: "Address not found or unauthorized" });
     }
 
-    await CustomerAddress.destroy({ where: { id } });
+    await CustomerAddress.destroy({ where: whereClause });
 
     res.json({ success: true, message: "Address deleted successfully" });
   } catch (error) {

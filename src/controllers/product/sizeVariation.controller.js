@@ -49,7 +49,20 @@ exports.getAllSizeVariations = async (req, res) => {
       ...where,
       order: [["id", "ASC"]]
     });
-    res.status(200).json({ success: true, data: sizes });
+
+    const parsedSizes = sizes.map(item => {
+      const data = item.toJSON();
+      if (typeof data.size === 'string') {
+        try {
+          data.size = JSON.parse(data.size);
+        } catch (e) {
+          data.size = [data.size];
+        }
+      }
+      return data;
+    });
+
+    res.status(200).json({ success: true, data: parsedSizes });
   } catch (error) {
     console.error("Get All Size Variations Error:", error);
     res.status(500).json({
@@ -70,7 +83,17 @@ exports.getSizeVariationById = async (req, res) => {
     if (!size) {
       return res.status(404).json({ success: false, message: "Size variation not found" });
     }
-    res.status(200).json({ success: true, data: size });
+
+    const data = size.toJSON();
+    if (typeof data.size === 'string') {
+      try {
+        data.size = JSON.parse(data.size);
+      } catch (e) {
+        data.size = [data.size];
+      }
+    }
+
+    res.status(200).json({ success: true, data: data });
   } catch (error) {
     console.error("Get Size Variation By Id Error:", error);
     res.status(500).json({

@@ -4,8 +4,9 @@ const Product = require("../../models/product/product.model");
 
 exports.getAllCartItems = async (req, res) => {
   try {
-    const host = req.get("host").split(":")[0];
-    const baseUrl = `${req.protocol}://${host}/`;
+    const host = req.get("host");
+    const protocol = host && host.includes("localhost") ? req.protocol : "https";
+    const baseUrl = `${protocol}://${host}/`;
 
     const page = parseInt(req.query.page) || 1;
     const limit = parseInt(req.query.limit) || 10;
@@ -45,7 +46,7 @@ exports.getAllCartItems = async (req, res) => {
         cartItem.product.thumbnailImage =
           cartItem.product.thumbnailImage.startsWith("http")
             ? cartItem.product.thumbnailImage
-            : `${baseUrl}${cartItem.product.thumbnailImage}`;
+            : `${baseUrl}${cartItem.product.thumbnailImage.replace(/[\\\[\]"]/g, "").replace(/^[\\\/]+/, "")}`;
       }
 
       return cartItem;
@@ -76,8 +77,9 @@ exports.getCartItemByCartId = async (req, res) => {
     
     const customerId = req.user.id;
 
-    const host = req.get("host").split(":")[0];
-    const baseUrl = `${req.protocol}://${host}/`;
+    const host = req.get("host");
+    const protocol = host && host.includes("localhost") ? req.protocol : "https";
+    const baseUrl = `${protocol}://${host}/`;
 
    
     const cart = await Cart.findOne({ 
@@ -114,15 +116,26 @@ exports.getCartItemByCartId = async (req, res) => {
       const item = cartItem.toJSON();
 
       if (item.product) {
-        item.product.thumbnailImage = `${baseUrl}${item.product.thumbnailImage}`;
+        item.product.thumbnailImage = `${baseUrl}${item.product.thumbnailImage.replace(/[\\\[\]"]/g, "").replace(/^[\\\/]+/, "")}`;
 
-        item.product.galleryImage = Array.isArray(item.product.galleryImage)
-          ? item.product.galleryImage.map((img) =>
-              img.trim().startsWith("http")
-                ? img.trim()
-                : `${baseUrl}${img.trim()}`
-            )
-          : [];
+        let galleryArray = item.product.galleryImage || [];
+        if (typeof galleryArray === 'string' && galleryArray.startsWith('[')) {
+          try {
+            galleryArray = JSON.parse(galleryArray);
+          } catch (e) {
+            galleryArray = [galleryArray];
+          }
+        } else if (typeof galleryArray === 'string') {
+          galleryArray = [galleryArray];
+        }
+
+        item.product.galleryImage = (Array.isArray(galleryArray) ? galleryArray : [])
+          .filter(img => typeof img === 'string')
+          .map((img) =>
+            img.trim().startsWith("http")
+              ? img.trim()
+              : `${baseUrl}${img.trim().replace(/[\\\[\]"]/g, "").replace(/^[\\\/]+/, "")}`
+          );
       }
 
       return item;

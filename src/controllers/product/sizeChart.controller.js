@@ -18,13 +18,14 @@ const getAllSizeCharts = async (req, res) => {
 
     // const baseUrl = `${req.protocol}://${req.get("host")}/`;
 
-    const host = req.get("host").split(":")[0];
-    const baseUrl = `${req.protocol}://${host}/`;
+    const host = req.get("host");
+    const protocol = host && host.includes("localhost") ? req.protocol : "https";
+    const baseUrl = `${protocol}://${host}/`;
 
     const updatedSizeCharts = sizeCharts.map((chart) => {
       const data = chart.toJSON();
       if (Array.isArray(data.image)) {
-        data.image = data.image.map((imgPath) => `${baseUrl}${imgPath}`);
+        data.image = data.image.map((imgPath) => `${baseUrl}${imgPath.replace(/[\\\[\]"]/g, "").replace(/^[\\\/]+/, "")}`);
       }
       return data;
     });
@@ -83,12 +84,13 @@ const getSizeChartById = async (req, res) => {
 
     // const baseUrl = `${req.protocol}://${req.get("host")}/`;
 
-    const host = req.get("host").split(":")[0];
-    const baseUrl = `${req.protocol}://${host}/`;
+    const host = req.get("host");
+    const protocol = host && host.includes("localhost") ? req.protocol : "https";
+    const baseUrl = `${protocol}://${host}/`;
 
     const data = sizeChart.toJSON();
     if (Array.isArray(data.image)) {
-      data.image = data.image.map((imgPath) => `${baseUrl}${imgPath}`);
+      data.image = data.image.map((imgPath) => `${baseUrl}${imgPath.replace(/[\\\[\]"]/g, "").replace(/^[\\\/]+/, "")}`);
     }
 
     res.status(200).json({
@@ -142,7 +144,7 @@ const createSizeChart = async (req, res) => {
       });
     }
 
-    image = req.files.image.map(file => `${process.env.FILE_PATH}${file.filename}`);
+    image = req.files.image.map(file => `${(process.env.FILE_PATH || "").replace(/[\\\[\]"]/g, "")}${file.filename.replace(/[\\\[\]"]/g, "")}`);
 
     const sizeChart = await ProductSizeChart.create({
       categoryId,
@@ -152,12 +154,13 @@ const createSizeChart = async (req, res) => {
 
     // const baseUrl = `${req.protocol}://${req.get("host")}/`;
 
-    const host = req.get("host").split(":")[0];
-    const baseUrl = `${req.protocol}://${host}/`;
+    const host = req.get("host");
+    const protocol = host && host.includes("localhost") ? req.protocol : "https";
+    const baseUrl = `${protocol}://${host}/`;
 
     const data = sizeChart.toJSON();
     if (Array.isArray(data.image)) {
-      data.image = data.image.map((imgPath) => `${baseUrl}${imgPath}`);
+      data.image = data.image.map((imgPath) => `${baseUrl}${imgPath.replace(/[\\\[\]"]/g, "").replace(/^[\\\/]+/, "")}`);
     }
 
     res.status(201).json({
@@ -260,7 +263,7 @@ const updateSizeChart = async (req, res) => {
     }
 
     if (req.files?.image && req.files.image.length > 0) {
-      const newImages = req.files.image.map(file => `${process.env.FILE_PATH}${file.filename}`);
+      const newImages = req.files.image.map(file => `${(process.env.FILE_PATH || "").replace(/[\\\[\]"]/g, "")}${file.filename.replace(/[\\\[\]"]/g, "")}`);
       image = [...image, ...newImages];
     }
 
@@ -285,12 +288,13 @@ const updateSizeChart = async (req, res) => {
 
     // const baseUrl = `${req.protocol}://${req.get("host")}/`;
 
-    const host = req.get("host").split(":")[0];
-    const baseUrl = `${req.protocol}://${host}/`;
+    const host = req.get("host");
+    const protocol = host && host.includes("localhost") ? req.protocol : "https";
+    const baseUrl = `${protocol}://${host}/`;
 
     const data = updatedSizeChart.toJSON();
     if (Array.isArray(data.image)) {
-      data.image = data.image.map((imgPath) => `${baseUrl}${imgPath}`);
+      data.image = data.image.map((imgPath) => `${baseUrl}${imgPath.replace(/[\\\[\]"]/g, "").replace(/^[\\\/]+/, "")}`);
     }
 
     res.status(200).json({

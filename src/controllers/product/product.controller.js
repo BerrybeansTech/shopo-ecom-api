@@ -39,9 +39,9 @@ const getAllProduct = async (req, res) => {
       sortingOrder = "DESC"
     } = req.query;
 
-    const host = req.get("host").split(":")[0];
-    const baseUrl = `${req.protocol}://${host}/`;
-    // const baseUrl = `${req.protocol}://${req.get("host")}/`;
+    const host = req.get("host");
+    const protocol = host.includes("localhost") ? req.protocol : "https";
+    const baseUrl = `${protocol}://${host}/`;
 
     console.log("baseUrl", baseUrl);
 
@@ -422,23 +422,32 @@ const getAllProduct = async (req, res) => {
       const data = product.toJSON();
 
       data.thumbnailImage = data.thumbnailImage
-        ? `${baseUrl}${data.thumbnailImage}`
+        ? `${baseUrl}${data.thumbnailImage.replace(/[\\\[\]"]/g, "").replace(/^[\\\/]+/, "")}`
         : null;
 
       let galleryArray = [];
       if (data.galleryImage) {
         try {
-          galleryArray = Array.isArray(data.galleryImage)
+          const rawGallery = Array.isArray(data.galleryImage)
             ? data.galleryImage
             : JSON.parse(data.galleryImage);
-
-          console.log(galleryArray, "galleryArrayyyyyyyyyyyyyyyyyyyyyyyyyyy");
+          
+          galleryArray = (Array.isArray(rawGallery) ? rawGallery : [rawGallery])
+            .flatMap(item => typeof item === 'string' ? item.split(',') : item)
+            .filter(Boolean);
         } catch {
-          galleryArray = [];
+          galleryArray = typeof data.galleryImage === 'string' 
+            ? data.galleryImage.split(',').filter(Boolean) 
+            : [];
         }
       }
+      if (!Array.isArray(galleryArray)) {
+        galleryArray = galleryArray ? [galleryArray] : [];
+      }
 
-      data.galleryImage = galleryArray.map((img) => `${baseUrl}${img}`);
+      data.galleryImage = galleryArray
+        .filter(img => typeof img === 'string')
+        .map((img) => `${baseUrl}${img.replace(/[\\\[\]"]/g, "").replace(/^[\\\/]+/, "")}`);
       data.averageRating = parseFloat(data.averageRating || 0).toFixed(1);
       data.reviewCount = parseInt(data.reviewCount || 0);
 
@@ -446,12 +455,7 @@ const getAllProduct = async (req, res) => {
       // to only the intersection with the requested sizes so the response shows
       // only the matched sizes (e.g. ["S","M","L","XL"] -> ["M","L"]).
       try {
-        if (
-          Array.isArray(data.inventories) &&
-          data.inventories.length &&
-          productSizeArray &&
-          productSizeArray.length
-        ) {
+        if (Array.isArray(data.inventories) && data.inventories.length > 0) {
           data.inventories = data.inventories.map((inv) => {
             if (inv && inv.productSize && inv.productSize.size) {
               let sizes = inv.productSize.size;
@@ -459,22 +463,26 @@ const getAllProduct = async (req, res) => {
                 try {
                   sizes = JSON.parse(sizes);
                 } catch (e) {
-                  sizes = [];
+                  sizes = [sizes];
                 }
               }
+
               if (Array.isArray(sizes)) {
-                const filtered = sizes.filter((s) =>
-                  productSizeArray.includes(String(s))
-                );
-                inv.productSize.size = filtered;
+                // If a size filter exists, filter the array; otherwise just keep it parsed
+                if (productSizeArray && productSizeArray.length > 0) {
+                  inv.productSize.size = sizes.filter((s) =>
+                    productSizeArray.includes(String(s))
+                  );
+                } else {
+                  inv.productSize.size = sizes;
+                }
               }
             }
             return inv;
           });
         }
       } catch (err) {
-        // non-fatal: leave sizes unchanged on error
-        console.warn("Failed to filter product sizes in response:", err);
+        console.warn("Failed to parse product sizes in response:", err);
       }
 
       return data;
@@ -599,8 +607,9 @@ const getProductById = async (req, res) => {
   try {
     // const baseUrl = `${req.protocol}://${req.get("host")}/`;
 
-    const host = req.get("host").split(":")[0];
-    const baseUrl = `${req.protocol}://${host}/`;
+    const host = req.get("host");
+    const protocol = host.includes("localhost") ? req.protocol : "https";
+    const baseUrl = `${protocol}://${host}/`;
 
     const product = await Product.findOne({
       where: { id },
@@ -659,27 +668,35 @@ const getProductById = async (req, res) => {
     let galleryArray = [];
     if (product.galleryImage) {
       try {
-        galleryArray = Array.isArray(product.galleryImage)
+        const rawGallery = Array.isArray(product.galleryImage)
           ? product.galleryImage
           : JSON.parse(product.galleryImage);
+        
+        galleryArray = (Array.isArray(rawGallery) ? rawGallery : [rawGallery])
+          .flatMap(item => typeof item === 'string' ? item.split(',') : item)
+          .filter(Boolean);
       } catch (err) {
-        console.error("Invalid galleryImage JSON:", product.galleryImage);
-        galleryArray = [];
+        galleryArray = typeof product.galleryImage === 'string' 
+          ? product.galleryImage.split(',').filter(Boolean) 
+          : [];
       }
     }
 
     const updatedThumbnailImage = product.thumbnailImage
-      ? `${baseUrl}${product.thumbnailImage}`
+      ? `${baseUrl}${product.thumbnailImage.replace(/[\\\[\]"]/g, "").replace(/^[\\\/]+/, "")}`
       : null;
     console.log(
       "Array.isArray(product.galleryImage)",
       Array.isArray(product.galleryImage),
       product.galleryImage
     );
+    if (!Array.isArray(galleryArray)) {
+      galleryArray = galleryArray ? [galleryArray] : [];
+    }
 
-    const updatedGalleryImage = galleryArray.map(
-      (imgPath) => `${baseUrl}${imgPath}`
-    );
+    const updatedGalleryImage = galleryArray
+      .filter(imgPath => typeof imgPath === 'string')
+      .map((imgPath) => `${baseUrl}${imgPath.replace(/[\\\[\]"]/g, "").replace(/^[\\\/]+/, "")}`);
 
     const ratings = product.productReviews?.map((r) => r.rating) || [];
     const averageRating =
@@ -687,8 +704,27 @@ const getProductById = async (req, res) => {
         ? (ratings.reduce((sum, r) => sum + r, 0) / ratings.length).toFixed(1)
         : 0;
 
+    const data = product.toJSON();
+
+    if (Array.isArray(data.inventories)) {
+      data.inventories = data.inventories.map((inv) => {
+        if (inv && inv.productSize && inv.productSize.size) {
+          let sizes = inv.productSize.size;
+          if (typeof sizes === "string") {
+            try {
+              sizes = JSON.parse(sizes);
+            } catch (e) {
+              sizes = [sizes];
+            }
+          }
+          inv.productSize.size = Array.isArray(sizes) ? sizes : [sizes];
+        }
+        return inv;
+      });
+    }
+
     const updatedProduct = {
-      ...product.toJSON(),
+      ...data,
       thumbnailImage: updatedThumbnailImage,
       galleryImage: updatedGalleryImage,
       averageRating,
@@ -762,12 +798,12 @@ const createProduct = async (req, res) => {
 
     // Handle file uploads
     const thumbnailImage = req.files?.thumbnailImage?.[0]
-      ? `${process.env.FILE_PATH}${req.files.thumbnailImage[0].filename}`
+      ? `${(process.env.FILE_PATH || "").replace(/[\\\[\]"]/g, "")}${req.files.thumbnailImage[0].filename.replace(/[\\\[\]"]/g, "")}`
       : null;
 
-    const galleryImage = req.files?.galleryImage
+      const galleryImage = req.files?.galleryImage
       ? req.files.galleryImage.map(
-        (file) => `${process.env.FILE_PATH}${file.filename}`
+        (file) => `${(process.env.FILE_PATH || "").replace(/[\\\[\]"]/g, "")}${file.filename.replace(/[\\\[\]"]/g, "")}`
       )
       : [];
 
@@ -848,10 +884,27 @@ const createProduct = async (req, res) => {
 
     await transaction.commit();
 
-    res.json({
+    const host = req.get("host");
+    const protocol = host && host.includes("localhost") ? req.protocol : "https";
+    const baseUrl = `${protocol}://${host}/`;
+
+    const cleanedProduct = newProduct.toJSON();
+    cleanedProduct.thumbnailImage = cleanedProduct.thumbnailImage
+      ? `${baseUrl}${cleanedProduct.thumbnailImage.replace(/[\\\[\]"]/g, "").replace(/^[\\\/]+/, "")}`
+      : null;
+    
+    let galleryArr = [];
+    try {
+      galleryArr = JSON.parse(cleanedProduct.galleryImage || "[]");
+    } catch { galleryArr = []; }
+    
+    cleanedProduct.galleryImage = (Array.isArray(galleryArr) ? galleryArr : [])
+      .map(img => `${baseUrl}${img.replace(/[\\\[\]"]/g, "").replace(/^[\\\/]+/, "")}`);
+
+    res.status(201).json({
       success: true,
       message: "Product created successfully",
-      data: newProduct,
+      data: cleanedProduct,
     });
   } catch (error) {
     console.error("Error creating Product:", error);
@@ -898,9 +951,18 @@ const updateProduct = async (req, res) => {
       try {
         oldGalleryImage = JSON.parse(oldGalleryImage);
       } catch {
-        oldGalleryImage = [];
+        // ✅ Handle comma-separated strings if parse fails
+        oldGalleryImage = oldGalleryImage.split(',').filter(Boolean);
       }
     }
+    if (!Array.isArray(oldGalleryImage)) {
+      oldGalleryImage = oldGalleryImage ? [oldGalleryImage] : [];
+    }
+
+    // ✅ Flat and split commas just in case it's ["img1,img2"]
+    oldGalleryImage = oldGalleryImage
+      .flatMap(item => typeof item === 'string' ? item.split(',') : item)
+      .filter(Boolean);
 
     // ✅ Normalize paths
     oldGalleryImage = oldGalleryImage.map((img) => {
@@ -955,7 +1017,7 @@ const updateProduct = async (req, res) => {
     // ✅ Add new gallery images
     if (req.files?.galleryImage?.length > 0) {
       const newImages = req.files.galleryImage.map(
-        (file) => `${process.env.FILE_PATH}${file.filename}`
+        (file) => `${(process.env.FILE_PATH || "").replace(/[\\\[\]"]/g, "")}${file.filename.replace(/[\\\[\]"]/g, "")}`
       );
       galleryImage = [...galleryImage, ...newImages];
     }
@@ -976,7 +1038,7 @@ const updateProduct = async (req, res) => {
         }
       }
 
-      thumbnailImage = `${process.env.FILE_PATH}${req.files.thumbnailImage[0].filename}`;
+      thumbnailImage = `${(process.env.FILE_PATH || "").replace(/[\\\[\]"]/g, "")}${req.files.thumbnailImage[0].filename.replace(/[\\\[\]"]/g, "")}`;
     }
 
     // ✅ Save (store gallery as JSON string)
@@ -1001,13 +1063,17 @@ const updateProduct = async (req, res) => {
       { where: { id } }
     );
 
+    const host = req.get("host");
+    const protocol = host && host.includes("localhost") ? req.protocol : "https";
+    const baseUrl = `${protocol}://${host}/`;
+
     return res.json({
       success: true,
       message: "Product updated successfully",
       data: {
         id,
-        thumbnailImage,
-        galleryImage,
+        thumbnailImage: thumbnailImage ? `${baseUrl}${thumbnailImage.replace(/[\\\[\]"]/g, "").replace(/^[\\\/]+/, "")}` : null,
+        galleryImage: galleryImage.map(img => `${baseUrl}${img.replace(/[\\\[\]"]/g, "").replace(/^[\\\/]+/, "")}`),
       },
     });
   } catch (error) {

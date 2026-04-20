@@ -18,11 +18,9 @@ const getAllBlog = async (req, res) => {
     if (andConditions.length > 0) {
       whereClause[Op.and] = andConditions;
     }
-    let host = req.get("host");
-
-    host = host ? host.split(":")[0] : "";
-
-    const baseUrl = `${req.protocol}://${host}/`;
+    const host = req.get("host");
+    const protocol = host && host.includes("localhost") ? req.protocol : "https";
+    const baseUrl = `${protocol}://${host}/`;
 
     const page = parseInt(req.query.page) || 1;
     const limit = parseInt(req.query.limit) || 10;
@@ -36,16 +34,14 @@ const getAllBlog = async (req, res) => {
     });
 
     const updatedBlogs = blogs.map((t) => {
-      const featuredImage = t.featuredImage
-        ? `${baseUrl}${Array.isArray(t.featuredImage)
-          ? t.featuredImage[0]
-          : t.featuredImage
-        }`
+      const featuredPath = Array.isArray(t.featuredImage) ? t.featuredImage[0] : t.featuredImage;
+      const featuredImage = featuredPath
+        ? `${baseUrl}${featuredPath.replace(/[\\\[\]"]/g, "").replace(/^[\\\/]+/, "")}`
         : null;
 
-      const bannerImage = t.bannerImage
-        ? `${baseUrl}${Array.isArray(t.bannerImage) ? t.bannerImage[0] : t.bannerImage
-        }`
+      const bannerPath = Array.isArray(t.bannerImage) ? t.bannerImage[0] : t.bannerImage;
+      const bannerImage = bannerPath
+        ? `${baseUrl}${bannerPath.replace(/[\\\[\]"]/g, "").replace(/^[\\\/]+/, "")}`
         : null;
 
       return {
@@ -79,11 +75,9 @@ const getBlogById = async (req, res) => {
 
   try {
     
-let host = req.get("host");
-
-host = host ? host.split(":")[0] : "";
-
-const baseUrl = `${req.protocol}://${host}/`;
+    const host = req.get("host");
+    const protocol = host && host.includes("localhost") ? req.protocol : "https";
+    const baseUrl = `${protocol}://${host}/`;
 
     const t = await blog.findOne({ where: { id } });
 
@@ -93,14 +87,14 @@ const baseUrl = `${req.protocol}://${host}/`;
         .json({ success: false, message: "Blog not found" });
     }
 
-    const featuredImage = t.featuredImage
-      ? `${baseUrl}${Array.isArray(t.featuredImage) ? t.featuredImage[0] : t.featuredImage
-      }`
+    const featuredPath = Array.isArray(t.featuredImage) ? t.featuredImage[0] : t.featuredImage;
+    const featuredImage = featuredPath
+      ? `${baseUrl}${featuredPath.replace(/[\\\[\]"]/g, "").replace(/^[\\\/]+/, "")}`
       : null;
 
-    const bannerImage = t.bannerImage
-      ? `${baseUrl}${Array.isArray(t.bannerImage) ? t.bannerImage[0] : t.bannerImage
-      }`
+    const bannerPath = Array.isArray(t.bannerImage) ? t.bannerImage[0] : t.bannerImage;
+    const bannerImage = bannerPath
+      ? `${baseUrl}${bannerPath.replace(/[\\\[\]"]/g, "").replace(/^[\\\/]+/, "")}`
       : null;
 
     res.json({
@@ -127,11 +121,11 @@ const createBlog = async (req, res) => {
   // const imagePaths = req.file ? [`${process.env.FILE_PATH}${req.file.filename}`] : [];
 
   const featuredImage = req.files?.featuredImage?.[0]
-    ? `${process.env.FILE_PATH}${req.files.featuredImage[0].filename}`
+    ? `${(process.env.FILE_PATH || "").replace(/[\\\[\]"]/g, "")}${req.files.featuredImage[0].filename.replace(/[\\\[\]"]/g, "")}`
     : null;
 
   const bannerImage = req.files?.bannerImage?.[0]
-    ? `${process.env.FILE_PATH}${req.files.bannerImage[0].filename}`
+    ? `${(process.env.FILE_PATH || "").replace(/[\\\[\]"]/g, "")}${req.files.bannerImage[0].filename.replace(/[\\\[\]"]/g, "")}`
     : [];
 
   try {
@@ -146,10 +140,22 @@ const createBlog = async (req, res) => {
       metaDescription,
     });
 
+    const host = req.get("host");
+    const protocol = host && host.includes("localhost") ? req.protocol : "https";
+    const baseUrl = `${protocol}://${host}/`;
+
+    const cleanedBlog = newBlog.toJSON();
+    cleanedBlog.featuredImage = cleanedBlog.featuredImage
+      ? `${baseUrl}${cleanedBlog.featuredImage.replace(/[\\\[\]"]/g, "").replace(/^[\\\/]+/, "")}`
+      : null;
+    cleanedBlog.bannerImage = cleanedBlog.bannerImage
+      ? `${baseUrl}${cleanedBlog.bannerImage.replace(/[\\\[\]"]/g, "").replace(/^[\\\/]+/, "")}`
+      : null;
+
     res.json({
       success: true,
       message: "blog created successfully",
-      data: newBlog,
+      data: cleanedBlog,
     });
   } catch (error) {
     console.error("Error creating blog:", error);
@@ -188,7 +194,7 @@ const updateBlog = async (req, res) => {
         if (fs.existsSync(oldPath)) fs.unlinkSync(oldPath);
       }
 
-      featuredImage = `${process.env.FILE_PATH}${req.files.featuredImage[0].filename}`;
+      featuredImage = `${(process.env.FILE_PATH || "").replace(/[\\\[\]"]/g, "")}${req.files.featuredImage[0].filename.replace(/[\\\[\]"]/g, "")}`;
     }
 
     if (req.files?.bannerImage?.[0]) {
@@ -197,7 +203,7 @@ const updateBlog = async (req, res) => {
         if (fs.existsSync(oldPath)) fs.unlinkSync(oldPath);
       }
 
-      bannerImage = `${process.env.FILE_PATH}${req.files.bannerImage[0].filename}`;
+      bannerImage = `${(process.env.FILE_PATH || "").replace(/[\\\[\]"]/g, "")}${req.files.bannerImage[0].filename.replace(/[\\\[\]"]/g, "")}`;
     }
 
     await blog.update(
@@ -213,7 +219,19 @@ const updateBlog = async (req, res) => {
       { where: { id } }
     );
 
-    res.json({ success: true, message: "Blog updated successfully" });
+    const host = req.get("host");
+    const protocol = host && host.includes("localhost") ? req.protocol : "https";
+    const baseUrl = `${protocol}://${host}/`;
+
+    res.json({
+      success: true,
+      message: "Blog updated successfully",
+      data: {
+        id,
+        featuredImage: featuredImage ? `${baseUrl}${featuredImage.replace(/[\\\[\]"]/g, "").replace(/^[\\\/]+/, "")}` : null,
+        bannerImage: bannerImage ? `${baseUrl}${bannerImage.replace(/[\\\[\]"]/g, "").replace(/^[\\\/]+/, "")}` : null,
+      }
+    });
   } catch (error) {
     console.error("Error updating blog:", error);
     res.status(500).json({ success: false, message: "Failed to update blog" });
