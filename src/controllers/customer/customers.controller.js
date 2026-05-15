@@ -9,8 +9,8 @@ const {
   generateAccessToken,
   generateRefreshToken,
 } = require("../../services/jwt.service");
-// const { OAuth2Client } = require("google-auth-library");
-// const client = new OAuth2Client(process.env.GOOGLE_CLIENT_ID);
+const { OAuth2Client } = require("google-auth-library");
+const client = new OAuth2Client(process.env.GOOGLE_CLIENT_ID);
 
 const getAllCustomers = async (req, res) => {
   try {
@@ -650,6 +650,83 @@ const clearWishlist = async (req, res) => {
 };
 
 
+const googleLogin = async (req, res) => {
+  const { idToken } = req.body;
+
+  try {
+    if (!idToken) {
+      return res.status(400).json({
+        success: false,
+        message: "Google ID Token is required",
+      });
+    }
+
+    const ticket = await client.verifyIdToken({
+      idToken,
+      audience: process.env.GOOGLE_CLIENT_ID,
+    });
+
+    const payload = ticket.getPayload();
+    const { email, name, sub: googleId, picture } = payload;
+
+    let user = await Customers.findOne({ where: { email } });
+
+    if (!user) {
+      // Create new user if doesn't exist
+      user = await Customers.create({
+        name,
+        email,
+        googleAuthToken: googleId, // Storing googleId here
+        status: "active",
+        wishList: [],
+      });
+
+      // Create cart for new user
+      await Cart.create({
+        customerId: user.id,
+        isActive: true,
+      });
+    } else {
+      // If user exists but doesn't have googleAuthToken, update it
+      if (!user.googleAuthToken) {
+        user.googleAuthToken = googleId;
+        await user.save();
+      }
+    }
+
+    const tokenPayload = {
+      id: user.id,
+      name: user.name,
+      email: user.email,
+      phone: user.phone,
+    };
+
+    const accessToken = generateAccessToken(tokenPayload);
+    const refreshToken = generateRefreshToken(tokenPayload);
+
+    res.cookie("refreshToken", refreshToken, {
+      httpOnly: true,
+      secure: process.env.NODE_ENV === "production",
+      sameSite: "Strict",
+      maxAge: parseInt(process.env.COOKIE_MAX_AGE || 7 * 24 * 60 * 60 * 1000),
+    });
+
+    res.json({
+      success: true,
+      message: "Google login successful",
+      accessToken,
+      user,
+    });
+  } catch (error) {
+    console.error("Google Login error:", error);
+    res.status(500).json({
+      success: false,
+      message: "Failed to authenticate with Google",
+      error: error.message,
+    });
+  }
+};
+
 const checkUserExists = async (req, res) => {
   try {
     const { email, phone } = req.query;
@@ -702,5 +779,6 @@ module.exports = {
   checkUserExists,
   getUserWishlist,
   updateWishlist,
-  clearWishlist
+  clearWishlist,
+  googleLogin
 };

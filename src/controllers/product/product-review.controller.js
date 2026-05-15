@@ -74,12 +74,27 @@ exports.createReview = async (req, res) => {
     const baseUrl = `${protocol}://${host}/`;
 
     const cleanedReview = review.toJSON();
-    let imgArr = [];
-    try {
-      imgArr = JSON.parse(cleanedReview.images || "[]");
-    } catch { imgArr = []; }
+    
+    // Robust image parsing
+    let imgArr = cleanedReview.images || [];
+    if (typeof imgArr === 'string') {
+      try {
+        imgArr = JSON.parse(imgArr);
+      } catch (e) {
+        imgArr = imgArr.split(',').filter(Boolean);
+      }
+    }
+    
+    if (!Array.isArray(imgArr)) {
+      imgArr = imgArr ? [imgArr] : [];
+    }
 
-    cleanedReview.images = (Array.isArray(imgArr) ? imgArr : [])
+    const flatImgArr = imgArr.flatMap(img => 
+      typeof img === 'string' ? img.split(',').filter(Boolean) : img
+    );
+
+    cleanedReview.images = flatImgArr
+      .filter(img => typeof img === 'string')
       .map(img => `${baseUrl}${img.replace(/[\\\[\]"]/g, "").replace(/^[\\\/]+/, "")}`);
 
     res.status(201).json({
@@ -124,9 +139,46 @@ exports.getAllReviews = async (req, res) => {
       order: [["createdAt", "DESC"]]
     });
 
+    const host = req.get("host");
+    const protocol = host && host.includes("localhost") ? req.protocol : "https";
+    const baseUrl = `${protocol}://${host}/`;
+
+    const formattedReviews = reviews.map(review => {
+      const data = review.toJSON();
+      
+      // Format review images
+      let reviewImages = data.images || [];
+      if (typeof reviewImages === 'string') {
+        try {
+          reviewImages = JSON.parse(reviewImages);
+        } catch (e) {
+          reviewImages = reviewImages.split(',').filter(Boolean);
+        }
+      }
+      
+      if (!Array.isArray(reviewImages)) {
+        reviewImages = reviewImages ? [reviewImages] : [];
+      }
+
+      const flatImages = reviewImages.flatMap(img => 
+        typeof img === 'string' ? img.split(',').filter(Boolean) : img
+      );
+
+      data.images = flatImages
+        .filter(img => typeof img === 'string')
+        .map(img => `${baseUrl}${img.replace(/[\\\[\]"]/g, "").replace(/^[\\\/]+/, "")}`);
+
+      // Format Product thumbnail
+      if (data.Product && data.Product.thumbnailImage) {
+        data.Product.thumbnailImage = `${baseUrl}${data.Product.thumbnailImage.replace(/[\\\[\]"]/g, "").replace(/^[\\\/]+/, "")}`;
+      }
+
+      return data;
+    });
+
     res.status(200).json({
       success: true,
-      data: reviews
+      data: formattedReviews
     });
   } catch (error) {
     console.error("Get All Reviews Error:", error);
@@ -300,20 +352,34 @@ exports.getReviewsByProduct = async (req, res) => {
     const baseUrl = `${protocol}://${host}/`;
     const formattedReviews = reviews.map(review => {
       const data = review.toJSON();
+      
+      // Robust image parsing
       let reviewImages = data.images || [];
-      if (typeof reviewImages === 'string' && reviewImages.startsWith('[')) {
+      if (typeof reviewImages === 'string') {
         try {
           reviewImages = JSON.parse(reviewImages);
         } catch (e) {
-          reviewImages = [reviewImages];
+          reviewImages = reviewImages.split(',').filter(Boolean);
         }
-      } else if (typeof reviewImages === 'string') {
-        reviewImages = [reviewImages];
       }
 
-      data.images = (Array.isArray(reviewImages) ? reviewImages : [])
+      if (!Array.isArray(reviewImages)) {
+        reviewImages = reviewImages ? [reviewImages] : [];
+      }
+
+      const flatImages = reviewImages.flatMap(img => 
+        typeof img === 'string' ? img.split(',').filter(Boolean) : img
+      );
+
+      data.images = flatImages
         .filter(img => typeof img === 'string')
         .map(img => `${baseUrl}${img.replace(/[\\\[\]"]/g, "").replace(/^[\\\/]+/, "")}`);
+      
+      // Format Product thumbnail if it exists
+      if (data.Product && data.Product.thumbnailImage) {
+        data.Product.thumbnailImage = `${baseUrl}${data.Product.thumbnailImage.replace(/[\\\[\]"]/g, "").replace(/^[\\\/]+/, "")}`;
+      }
+
       return data;
     });
 
@@ -378,9 +444,42 @@ exports.getReviewById = async (req, res) => {
       });
     }
 
+    const host = req.get("host");
+    const protocol = host && host.includes("localhost") ? req.protocol : "https";
+    const baseUrl = `${protocol}://${host}/`;
+
+    const data = review.toJSON();
+    
+    // Format review images
+    let reviewImages = data.images || [];
+    if (typeof reviewImages === 'string') {
+      try {
+        reviewImages = JSON.parse(reviewImages);
+      } catch (e) {
+        reviewImages = reviewImages.split(',').filter(Boolean);
+      }
+    }
+    
+    if (!Array.isArray(reviewImages)) {
+      reviewImages = reviewImages ? [reviewImages] : [];
+    }
+
+    const flatImages = reviewImages.flatMap(img => 
+      typeof img === 'string' ? img.split(',').filter(Boolean) : img
+    );
+
+    data.images = flatImages
+      .filter(img => typeof img === 'string')
+      .map(img => `${baseUrl}${img.replace(/[\\\[\]"]/g, "").replace(/^[\\\/]+/, "")}`);
+
+    // Format Product thumbnail
+    if (data.Product && data.Product.thumbnailImage) {
+      data.Product.thumbnailImage = `${baseUrl}${data.Product.thumbnailImage.replace(/[\\\[\]"]/g, "").replace(/^[\\\/]+/, "")}`;
+    }
+
     res.status(200).json({
       success: true,
-      data: review
+      data: data
     });
   } catch (error) {
     console.error("Get Review By Id Error:", error);
@@ -523,27 +622,38 @@ exports.updateReview = async (req, res) => {
       ]
     });
 
-    // ✅ Parse images before sending
-    if (updatedReview.images) {
-      try {
-        updatedReview.images = JSON.parse(updatedReview.images);
-      } catch {
-        updatedReview.images = [];
-      }
-    }
-
     const host = req.get("host");
     const protocol = host && host.includes("localhost") ? req.protocol : "https";
     const baseUrl = `${protocol}://${host}/`;
 
     const cleanedUpdate = updatedReview.toJSON();
-    let updImgArr = [];
-    try {
-      updImgArr = typeof cleanedUpdate.images === "string" ? JSON.parse(cleanedUpdate.images || "[]") : cleanedUpdate.images || [];
-    } catch { updImgArr = []; }
+    
+    // Robust image parsing
+    let updImgArr = cleanedUpdate.images || [];
+    if (typeof updImgArr === 'string') {
+      try {
+        updImgArr = JSON.parse(updImgArr);
+      } catch (e) {
+        updImgArr = updImgArr.split(',').filter(Boolean);
+      }
+    }
 
-    cleanedUpdate.images = (Array.isArray(updImgArr) ? updImgArr : [])
+    if (!Array.isArray(updImgArr)) {
+      updImgArr = updImgArr ? [updImgArr] : [];
+    }
+
+    const flatUpdImages = updImgArr.flatMap(img => 
+      typeof img === 'string' ? img.split(',').filter(Boolean) : img
+    );
+
+    cleanedUpdate.images = flatUpdImages
+      .filter(img => typeof img === 'string')
       .map(img => `${baseUrl}${img.replace(/[\\\[\]"]/g, "").replace(/^[\\\/]+/, "")}`);
+
+    // Format Product thumbnail
+    if (cleanedUpdate.Product && cleanedUpdate.Product.thumbnailImage) {
+      cleanedUpdate.Product.thumbnailImage = `${baseUrl}${cleanedUpdate.Product.thumbnailImage.replace(/[\\\[\]"]/g, "").replace(/^[\\\/]+/, "")}`;
+    }
 
     return res.status(200).json({
       success: true,
