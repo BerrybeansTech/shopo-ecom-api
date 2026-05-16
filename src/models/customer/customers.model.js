@@ -41,6 +41,16 @@ const Customers = sequelize.define('Customers', {
     allowNull: true, 
   },
 
+  loginType: {
+    type: DataTypes.ENUM('local', 'google'),
+    defaultValue: 'local',
+  },
+
+  profilePicture: {
+    type: DataTypes.TEXT,
+    allowNull: true,
+  },
+
   address: {
     type: DataTypes.TEXT,
     allowNull: true,

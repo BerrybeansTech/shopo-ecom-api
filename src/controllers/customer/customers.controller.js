@@ -20,7 +20,7 @@ const getAllCustomers = async (req, res) => {
 
     if (allCustomers) {
       const result = await Customers.findAndCountAll({
-        attributes: ["id", "name"],
+        attributes: ["id", "name", "profilePicture"],
       });
       return res.json({
         success: true,
@@ -74,10 +74,10 @@ const getCustomersById = async (req, res) => {
   const { id } = req.params;
 
   try {
-    if (!id || isNaN(id)) {
+    if (!id) {
       return res.status(400).json({
         success: false,
-        message: "Invalid customer ID provided.",
+        message: "Customer ID is required.",
       });
     }
 
@@ -176,6 +176,7 @@ const createCustomers = async (req, res) => {
         email,
         phone,
         password: hashedPassword,
+        loginType: 'local',
         address,
         city,
         state,
@@ -503,11 +504,11 @@ const deleteCustomers = async (req, res) => {
   const transaction = await sequelize.transaction();
 
   try {
-    if (!id || isNaN(id)) {
+    if (!id) {
       await transaction.rollback();
       return res.status(400).json({
         success: false,
-        message: "Invalid customer ID provided.",
+        message: "Customer ID is required.",
       });
     }
 
@@ -677,6 +678,8 @@ const googleLogin = async (req, res) => {
         name,
         email,
         googleAuthToken: googleId, // Storing googleId here
+        loginType: 'google',
+        profilePicture: picture,
         status: "active",
         wishList: [],
       });
@@ -687,11 +690,11 @@ const googleLogin = async (req, res) => {
         isActive: true,
       });
     } else {
-      // If user exists but doesn't have googleAuthToken, update it
-      if (!user.googleAuthToken) {
-        user.googleAuthToken = googleId;
-        await user.save();
-      }
+      // If user exists, update their profile and provider info if needed
+      user.googleAuthToken = googleId;
+      user.loginType = 'google';
+      if (picture) user.profilePicture = picture;
+      await user.save();
     }
 
     const tokenPayload = {

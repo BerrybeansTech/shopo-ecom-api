@@ -1,9 +1,9 @@
+const PDFDocument = require('pdfkit');
+const fs = require('fs');
+const path = require('path');
 const Invoice = require("../../models/orders/invoice.model");
 const Orders = require("../../models/orders/order.model");
 const Customers = require("../../models/customer/customers.model");
-const fs = require('fs');
-const path = require('path');
-const puppeteer = require('puppeteer');
 
 const getAllInvoices = async (req, res) => {
   const { customerId, page: pageQuery, limit: limitQuery } = req.query;
@@ -65,9 +65,7 @@ const getInvoiceById = async (req, res) => {
   });
 
   if (!invoice) {
-    const error = new Error("Invoice not found");
-    error.status = 404;
-    throw error;
+    return res.status(404).json({ success: false, message: "Invoice not found" });
   }
 
   res.json({ success: true, data: invoice });
@@ -80,9 +78,7 @@ const updateInvoice = async (req, res) => {
   const invoice = await Invoice.findByPk(id);
 
   if (!invoice) {
-    const error = new Error("Invoice not found");
-    error.status = 404;
-    throw error;
+    return res.status(404).json({ success: false, message: "Invoice not found" });
   }
 
   await invoice.update({ invoiceFile });
@@ -96,16 +92,11 @@ const deleteInvoice = async (req, res) => {
   const invoice = await Invoice.findByPk(id);
 
   if (!invoice) {
-    const error = new Error("Invoice not found");
-    error.status = 404;
-    throw error;
+    return res.status(404).json({ success: false, message: "Invoice not found" });
   }
 
-  // Delete the file from filesystem
   if (invoice.invoiceFile) {
-    const invoicesDir = path.join(__dirname, '../../uploads/invoices');
-    const filePath = path.join(invoicesDir, invoice.invoiceFile);
-
+    const filePath = path.join(__dirname, '../../uploads/invoices', invoice.invoiceFile);
     if (fs.existsSync(filePath)) {
       fs.unlinkSync(filePath);
     }
@@ -120,457 +111,363 @@ const deleteInvoice = async (req, res) => {
 };
 
 const generateInvoiceHTML = (order, companyInfo) => {
-  const invoiceDate = new Date().toLocaleDateString('en-IN', {
-    year: 'numeric',
-    month: 'long',
-    day: 'numeric'
-  });
-  const invoiceNumber = `${companyInfo.invoicePrefix || 'INV'}/${new Date().getFullYear()}-${String(order.id).padStart(6, '0')}`;
-
-  // Use stored GST values from the order
-  const subtotal = parseFloat(order.subTotal || 0);
-  const totalCGST = parseFloat(order.totalCGST || 0);
-  const totalSGST = parseFloat(order.totalSGST || 0);
-  const totalIGST = parseFloat(order.totalIGST || 0);
-  const totalGstAmount = totalCGST + totalSGST + totalIGST;
-  const grandTotal = subtotal + totalGstAmount + (parseFloat(order.shippingCharge) || 0);
-
-  const isInterState = totalIGST > 0;
-
-  return `
-<!DOCTYPE html>
-<html lang="en">
-<head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Tax Invoice #${invoiceNumber}</title>
-    <style>
-        * {
-            margin: 0;
-            padding: 0;
-            box-sizing: border-box;
-        }
-        
-        body {
-            font-family: Arial, sans-serif;
-            background-color: #ffffff;
-            color: #000;
-            width: 794px;
-            height: 1123px;
-        }
-        
-        .invoice-container {
-            width: 100%;
-            height: 100%;
-            background-color: white;
-            border: 2px solid #000;
-            position: relative;
-        }
-        
-        .header {
-            text-align: center;
-            padding: 20px;
-            border-bottom: 2px solid #000;
-        }
-        
-        .header h1 {
-            font-size: 24px;
-            font-weight: bold;
-            margin-bottom: 20px;
-            letter-spacing: 2px;
-        }
-        
-        .company-header {
-            display: flex;
-            align-items: flex-start;
-            justify-content: space-between;
-            padding: 0 20px;
-        }
-        
-        .logo-section {
-            flex: 0 0 200px;
-        }
-        
-        .logo-placeholder {
-            width: 180px;
-            height: 80px;
-            background: linear-gradient(135deg, #e74c3c 0%, #e74c3c 50%, #000 50%, #000 100%);
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            color: white;
-            font-weight: bold;
-            font-size: 24px;
-            margin-bottom: 10px;
-        }
-        
-        .company-details {
-            flex: 1;
-            text-align: right;
-            font-size: 11px;
-            line-height: 1.6;
-        }
-        
-        .company-details strong {
-            font-size: 13px;
-            display: block;
-            margin-bottom: 5px;
-        }
-        
-        .invoice-meta {
-            display: table;
-            width: 100%;
-            border-collapse: collapse;
-            margin-top: 20px;
-        }
-        
-        .invoice-meta-row {
-            display: table-row;
-        }
-        
-        .invoice-meta-cell {
-            display: table-cell;
-            padding: 10px 20px;
-            border: 1px solid #000;
-            font-size: 12px;
-        }
-        
-        .invoice-meta-cell strong {
-            display: block;
-            margin-bottom: 5px;
-            font-size: 11px;
-        }
-        
-        .parties-section {
-            display: table;
-            width: 100%;
-            border-collapse: collapse;
-        }
-        
-        .parties-row {
-            display: table-row;
-        }
-        
-        .party-cell {
-            display: table-cell;
-            width: 50%;
-            padding: 15px 20px;
-            border: 1px solid #000;
-            vertical-align: top;
-            font-size: 11px;
-            line-height: 1.6;
-        }
-        
-        .party-cell strong {
-            display: block;
-            margin-bottom: 8px;
-            font-size: 12px;
-            font-weight: bold;
-        }
-        
-        .items-table {
-            width: 100%;
-            border-collapse: collapse;
-            margin-top: 0;
-        }
-        
-        .items-table th,
-        .items-table td {
-            border: 1px solid #000;
-            padding: 10px;
-            text-align: left;
-            font-size: 11px;
-        }
-        
-        .items-table th {
-            background-color: #f5f5f5;
-            font-weight: bold;
-            text-align: center;
-        }
-        
-        .items-table td.number {
-            text-align: right;
-        }
-        
-        .items-table td.center {
-            text-align: center;
-        }
-        
-        .totals-section {
-            display: table;
-            width: 100%;
-            border-collapse: collapse;
-        }
-        
-        .totals-row {
-            display: table-row;
-        }
-        
-        .totals-cell {
-            display: table-cell;
-            padding: 10px 20px;
-            border: 1px solid #000;
-            font-size: 12px;
-        }
-        
-        .totals-cell.label {
-            width: 70%;
-            text-align: right;
-            font-weight: bold;
-        }
-        
-        .totals-cell.amount {
-            width: 30%;
-            text-align: right;
-            font-weight: bold;
-        }
-        
-        .grand-total {
-            background-color: #f5f5f5;
-        }
-        
-        .footer {
-            text-align: center;
-            padding: 15px;
-            border-top: 1px solid #000;
-            font-size: 10px;
-            font-style: italic;
-            position: absolute;
-            bottom: 0;
-            width: 100%;
-        }
-    </style>
-</head>
-<body>
-    <div class="invoice-container">
-        <!-- Header -->
-        <div class="header">
-            <h1>TAX INVOICE</h1>
-        </div>
-        
-        <!-- Company Header -->
-        <div class="company-header">
-            <div class="logo-section">
-                <div class="logo-placeholder">
-                    ${companyInfo.logo || 'LOGO'}
-                </div>
-            </div>
-            <div class="company-details">
-                <strong>${companyInfo.name || 'Company Name'}</strong>
-                ${companyInfo.address || ''}<br>
-                ${companyInfo.address2 || ''}<br>
-                ${companyInfo.city || ''}, ${companyInfo.state || ''}<br>
-                ${companyInfo.country || 'India'} ${companyInfo.postalCode || ''}<br>
-                ${companyInfo.stateCode || 'Maharashtra'}, India<br>
-                <strong>GSTIN:</strong> ${companyInfo.gstin || ''}<br>
-                ${companyInfo.email || ''}
-            </div>
-        </div>
-        
-        <!-- Invoice Meta -->
-        <div class="invoice-meta">
-            <div class="invoice-meta-row">
-                <div class="invoice-meta-cell">
-                    <strong>Invoice No</strong>
-                    ${invoiceNumber}
-                </div>
-                <div class="invoice-meta-cell">
-                    <strong>Invoice Date</strong>
-                    ${invoiceDate}
-                </div>
-            </div>
-        </div>
-        
-        <!-- Bill To / Ship To -->
-        <div class="parties-section">
-            <div class="parties-row">
-                <div class="party-cell">
-                    <strong>Bill To</strong>
-                    ${order.customer?.name || 'Customer Name'}<br>
-                    ${order.customer?.address || 'Address Line 1'}<br>
-                    ${order.customer?.address2 || 'Address Line 2'}<br>
-                    ${order.customer?.city || 'City'} ${order.customer?.postalCode || ''}<br>
-                    ${order.customer?.state || 'State'}<br>
-                    Email: ${order.customer?.email || ''}<br>
-                    Phone: ${order.customer?.phone || ''}
-                </div>
-                <div class="party-cell">
-                    <strong>Ship To</strong>
-                    ${order.shipping?.name || order.customer?.name || 'Customer Name'}<br>
-                    ${order.shipping?.address || order.customer?.address || 'Address Line 1'}<br>
-                    ${order.shipping?.address2 || order.customer?.address2 || 'Address Line 2'}<br>
-                    ${order.shipping?.city || order.customer?.city || 'City'} ${order.shipping?.postalCode || order.customer?.postalCode || ''}<br>
-                    ${order.shipping?.state || order.customer?.state || 'State'}<br>
-                    Email: ${order.shipping?.email || order.customer?.email || ''}<br>
-                    Phone: ${order.shipping?.phone || order.customer?.phone || ''}
-                </div>
-            </div>
-        </div>
-        
-        <!-- Items Table -->
-        <table class="items-table">
-            <thead>
-                <tr>
-                    <th>Item & Description</th>
-                    <th>Qty</th>
-                    <th>Taxable Rate</th>
-                    ${isInterState ? '<th>IGST Amount</th>' : '<th>CGST+SGST</th>'}
-                    <th>Total (Incl. Tax)</th>
-                </tr>
-            </thead>
-            <tbody>
-                ${order.OrderItems && order.OrderItems.length > 0 
-                    ? order.OrderItems.map(item => `
-                <tr>
-                    <td>${item.productName || 'Product'}</td>
-                    <td class="center">${item.quantity || 1}</td>
-                    <td class="number">₹${parseFloat(item.unitPrice || 0).toFixed(2)}</td>
-                    <td class="number">₹${(parseFloat(item.cgst || 0) + parseFloat(item.sgst || 0) + parseFloat(item.igst || 0)).toFixed(2)}</td>
-                    <td class="number">₹${(parseFloat(item.totalPrice || 0) + parseFloat(item.cgst || 0) + parseFloat(item.sgst || 0) + parseFloat(item.igst || 0)).toFixed(2)}</td>
-                </tr>
-                `).join('')
-                    : `<tr><td colspan="4" style="text-align: center;">No items found</td></tr>`
-                }
-            </tbody>
-        </table>
-        
-        <!-- Totals Section -->
-        <div class="totals-section">
-            <div class="totals-row">
-                <div class="totals-cell label">Subtotal</div>
-                <div class="totals-cell amount">₹${subtotal.toFixed(2)}</div>
-            </div>
-            ${isInterState ? `
-            <div class="totals-row">
-                <div class="totals-cell label">IGST</div>
-                <div class="totals-cell amount">₹${totalIGST.toFixed(2)}</div>
-            </div>` : `
-            <div class="totals-row">
-                <div class="totals-cell label">CGST</div>
-                <div class="totals-cell amount">₹${totalCGST.toFixed(2)}</div>
-            </div>
-            <div class="totals-row">
-                <div class="totals-cell label">SGST</div>
-                <div class="totals-cell amount">₹${totalSGST.toFixed(2)}</div>
-            </div>`}
-            ${order.shippingCharge > 0 ? `
-            <div class="totals-row">
-                <div class="totals-cell label">Shipping Charge</div>
-                <div class="totals-cell amount">₹${parseFloat(order.shippingCharge).toFixed(2)}</div>
-            </div>` : ''}
-            <div class="totals-row grand-total">
-                <div class="totals-cell label">Grand Total</div>
-                <div class="totals-cell amount">₹${grandTotal.toFixed(2)}</div>
-            </div>
-        </div>
-        
-        <!-- Footer -->
-        <div class="footer">
-            This is a system-generated invoice. No seal or signature is required.
-        </div>
-    </div>
-</body>
-</html>
-  `;
+    // This is a legacy function kept for compatibility if needed elsewhere
+    return `HTML Legacy Support`;
 };
 
-// Create invoice as IMAGE (PNG)
+// ===== HELPERS =====
+
+/**
+ * Parse the shippingAddress field which is stored as:
+ * "Name, Address, City, State - Pincode"
+ */
+const parseShippingAddress = (shippingAddress) => {
+  if (!shippingAddress) return {};
+
+  // Try JSON first (future-proofing)
+  if (typeof shippingAddress === 'object') return shippingAddress;
+  try {
+    const parsed = JSON.parse(shippingAddress);
+    if (typeof parsed === 'object') return parsed;
+  } catch (e) { /* not JSON, parse as string */ }
+
+  // Parse formatted string: "Name, Address, City, State - Pincode"
+  const parts = shippingAddress.split(',').map(s => s.trim());
+  if (parts.length >= 4) {
+    const lastPart = parts[parts.length - 1]; // "State - Pincode"
+    const statePinMatch = lastPart.match(/^(.+?)\s*-\s*(\d+)$/);
+    return {
+      fullName: parts[0],
+      address: parts[1],
+      address2: parts.length > 4 ? parts.slice(2, parts.length - 2).join(', ') : '',
+      city: parts[parts.length - 2],
+      state: statePinMatch ? statePinMatch[1].trim() : lastPart,
+      pincode: statePinMatch ? statePinMatch[2] : '',
+    };
+  }
+
+  return { address: shippingAddress };
+};
+
+/**
+ * Format currency for PDF display using Unicode ₹
+ */
+const formatCurrency = (amount) => {
+  const num = parseFloat(amount || 0);
+  return `\u20B9${num.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+};
+
+// ===== PDF GENERATION =====
+
+const generatePDFInvoice = (order, companyInfo, filePath) => {
+  return new Promise((resolve, reject) => {
+    try {
+      const doc = new PDFDocument({ size: 'A4', margin: 40 });
+      const stream = fs.createWriteStream(filePath);
+      doc.pipe(stream);
+
+      // --- Load Fonts ---
+      const nirmalaFont = path.join(__dirname, '../../assets/fonts/Nirmala-Regular.ttf');
+      const nirmalaBoldFont = path.join(__dirname, '../../assets/fonts/Nirmala-Bold.ttf');
+      const interFont = path.join(__dirname, '../../assets/fonts/Inter-Regular.ttf');
+      const interBoldFont = path.join(__dirname, '../../assets/fonts/Inter-Bold.ttf');
+      
+      const hasNirmala = fs.existsSync(nirmalaFont);
+      const hasInter = fs.existsSync(interFont);
+      
+      console.log(`[Invoice Font Check] Nirmala: ${hasNirmala}, Inter: ${hasInter}`);
+
+      // Use Nirmala as primary font if available (best for ₹), fallback to Inter, then Helvetica
+      const fontRegular = hasNirmala ? nirmalaFont : (hasInter ? interFont : 'Helvetica');
+      const fontBold = hasNirmala ? nirmalaBoldFont : (hasInter ? interBoldFont : 'Helvetica-Bold');
+      
+      if (!hasNirmala) {
+        console.warn("[Invoice Warning] Nirmala font missing! Rupee symbol (₹) may render incorrectly.");
+      }
+
+      // --- Layout Constants ---
+      const LEFT = 40;
+      const RIGHT = 555;
+      const WIDTH = RIGHT - LEFT;
+      const CL = 50;  // Content left padding
+      const MID = 297; // Middle X for two-column sections
+
+      // Drawing helpers
+      const hLine = (yPos) => { doc.moveTo(LEFT, yPos).lineTo(RIGHT, yPos).stroke(); };
+      const vLine = (x, y1, y2) => { doc.moveTo(x, y1).lineTo(x, y2).stroke(); };
+
+      // Parse shipping address and customer data
+      const shippingAddr = parseShippingAddress(order.shippingAddress);
+      const customer = order.Customer || order.customer || {};
+
+      // ===================== HEADER =====================
+      let y = 50;
+      doc.fontSize(18).font(fontBold).text('TAX INVOICE', LEFT, y, { align: 'center', width: WIDTH });
+      y = 75;
+      hLine(y);
+
+      // ===================== LOGO & COMPANY INFO =====================
+      const logoSectionY = y + 10;
+
+      // Logo - black rectangle with red accent triangle
+      doc.save();
+      doc.rect(CL, logoSectionY, 130, 45).fill('#1a1a1a');
+      // Red triangular accent
+      doc.moveTo(CL, logoSectionY)
+         .lineTo(CL + 50, logoSectionY)
+         .lineTo(CL, logoSectionY + 45)
+         .fill('#e74c3c');
+      doc.restore();
+      doc.fillColor('#ffffff').fontSize(11).font(fontBold)
+         .text('rabbitnfinch', CL + 12, logoSectionY + 17);
+      doc.fillColor('#000000');
+
+      // Company details (right-aligned)
+      const compRightW = 240;
+      const compX = RIGHT - compRightW - 10;
+      let cy = logoSectionY;
+      doc.fontSize(11).font(fontBold).text(companyInfo.name, compX, cy, { align: 'right', width: compRightW });
+      cy += 14;
+      doc.font(fontRegular).fontSize(7.5);
+      doc.text(companyInfo.address1, compX, cy, { align: 'right', width: compRightW }); cy += 10;
+      doc.text(companyInfo.address2, compX, cy, { align: 'right', width: compRightW }); cy += 10;
+      doc.text(companyInfo.address3, compX, cy, { align: 'right', width: compRightW }); cy += 10;
+      doc.text(companyInfo.address4, compX, cy, { align: 'right', width: compRightW }); cy += 10;
+      doc.text('India', compX, cy, { align: 'right', width: compRightW }); cy += 13;
+      doc.fontSize(9).font(fontBold).text('GSTIN:', compX, cy, { align: 'right', width: compRightW }); cy += 12;
+      doc.font(fontRegular).fontSize(8);
+      doc.text(companyInfo.gstin, compX, cy, { align: 'right', width: compRightW }); cy += 10;
+      doc.text(companyInfo.email, compX, cy, { align: 'right', width: compRightW }); cy += 10;
+
+      y = Math.max(logoSectionY + 55, cy + 5);
+      hLine(y);
+
+      // ===================== INVOICE META =====================
+      const metaY = y + 6;
+      const invoiceNumber = `RF/${new Date(order.createdAt || Date.now()).getFullYear()}-${order.id}`;
+      const invoiceDate = new Date(order.createdAt || Date.now()).toLocaleDateString('en-IN', {
+        day: '2-digit', month: 'long', year: 'numeric'
+      });
+
+      doc.fontSize(8).font(fontBold).fillColor('#555').text('Invoice No', CL, metaY);
+      doc.fontSize(7.5).font(fontRegular).fillColor('#000').text(invoiceNumber, CL, metaY + 12);
+
+      const metaDividerX = 410;
+      vLine(metaDividerX, y, y + 32);
+
+      doc.fontSize(8).font(fontBold).fillColor('#555').text('Invoice Date', metaDividerX + 10, metaY);
+      doc.fontSize(8).font(fontRegular).fillColor('#000').text(invoiceDate, metaDividerX + 10, metaY + 12);
+
+      y += 32;
+      hLine(y);
+
+      // ===================== BILL TO / SHIP TO =====================
+      const addrStartY = y;
+      const addrContentY = y + 8;
+
+      // Bill To
+      doc.fontSize(10).font(fontBold).fillColor('#000').text('Bill To', CL, addrContentY);
+      let billY = addrContentY + 16;
+      doc.fontSize(8).font(fontRegular);
+      
+      const billAddr = [
+        customer.name,
+        customer.address,
+        customer.city,
+        customer.state ? `${customer.state}${customer.postalCode ? ' - ' + customer.postalCode : ''}` : null
+      ].filter(line => line && line.trim() !== '');
+
+      billAddr.forEach(line => {
+        doc.text(line, CL, billY);
+        billY += 11;
+      });
+      doc.text(`Email: ${customer.email || ''}`, CL, billY); billY += 11;
+      doc.text(`Phone: ${customer.phone || ''}`, CL, billY); billY += 11;
+
+      // Ship To
+      doc.fontSize(10).font(fontBold).text('Ship To', MID + 10, addrContentY);
+      let shipY = addrContentY + 16;
+      doc.fontSize(8).font(fontRegular);
+
+      const shipAddr = [
+        shippingAddr.fullName || customer.name,
+        shippingAddr.address,
+        shippingAddr.address2,
+        shippingAddr.city,
+        shippingAddr.state ? `${shippingAddr.state}${shippingAddr.pincode ? ' - ' + shippingAddr.pincode : ''}` : null
+      ].filter(line => line && line.trim() !== '');
+
+      shipAddr.forEach(line => {
+        doc.text(line, MID + 10, shipY);
+        shipY += 11;
+      });
+      doc.text(`Email: ${customer.email || ''}`, MID + 10, shipY); shipY += 11;
+      doc.text(`Phone: ${shippingAddr.phone || customer.phone || ''}`, MID + 10, shipY); shipY += 11;
+
+      const addrEndY = Math.max(billY, shipY) + 5;
+      vLine(MID, addrStartY, addrEndY);
+      y = addrEndY;
+      hLine(y);
+
+      // ===================== ITEMS TABLE =====================
+      // Column positions
+      const col = {
+        item: CL,
+        qty: 215,
+        rate: 270,
+        igst: 380,
+        total: 465,
+      };
+
+      // Table Header
+      const headerY = y + 8;
+      doc.fontSize(8).font(fontBold).fillColor('#000');
+      doc.text('Item & Description', col.item, headerY, { width: col.qty - col.item - 5 });
+      doc.text('Qty', col.qty, headerY, { align: 'center', width: col.rate - col.qty });
+      doc.text('Taxable Rate', col.rate, headerY, { align: 'center', width: col.igst - col.rate });
+      doc.text('IGST Amount', col.igst, headerY, { align: 'center', width: col.total - col.igst });
+      doc.text('Total (Incl. Tax)', col.total, headerY, { align: 'center', width: RIGHT - col.total - 5 });
+
+      const tableHeaderBottomY = y + 23;
+      hLine(tableHeaderBottomY);
+
+      // Table Rows
+      let itemY = tableHeaderBottomY + 8;
+      const items = order.OrderItems || [];
+
+      items.forEach(item => {
+        
+        doc.font(fontRegular).fontSize(8).fillColor('#000');
+        const taxableRate = parseFloat(item.unitPrice || 0);
+        const qty = parseInt(item.quantity || 1);
+        const taxAmount = parseFloat(item.cgst || 0) + parseFloat(item.sgst || 0) + parseFloat(item.igst || 0);
+        const totalInclTax = (taxableRate * qty) + taxAmount;
+
+        doc.text(item.productName || 'Product', col.item, itemY, { width: col.qty - col.item - 5 });
+        doc.text(String(qty), col.qty, itemY, { align: 'center', width: col.rate - col.qty });
+        doc.text(formatCurrency(taxableRate), col.rate, itemY, { align: 'center', width: col.igst - col.rate });
+        doc.text(formatCurrency(taxAmount), col.igst, itemY, { align: 'center', width: col.total - col.igst });
+        doc.text(formatCurrency(totalInclTax), col.total, itemY, { align: 'center', width: RIGHT - col.total - 5 });
+
+        itemY += 20;
+      });
+
+      if (items.length === 0) itemY += 20;
+
+      const tableEndY = itemY + 5;
+
+      // Table column vertical dividers
+      vLine(col.qty, y, tableEndY);
+      vLine(col.rate, y, tableEndY);
+      vLine(col.igst, y, tableEndY);
+      vLine(col.total, y, tableEndY);
+
+      y = tableEndY;
+      hLine(y);
+
+      // ===================== TOTALS =====================
+      const totalsLabelX = col.igst - 15;
+      const totalsLabelW = col.total - totalsLabelX - 5;
+      const totalsValW = RIGHT - col.total - 10;
+
+      // Subtotal
+      let totY = y + 8;
+      doc.fontSize(9).font(fontBold).fillColor('#000');
+      doc.text('Subtotal', totalsLabelX, totY, { align: 'right', width: totalsLabelW });
+      doc.text(formatCurrency(order.subTotal || 0), col.total, totY, { align: 'right', width: totalsValW });
+      totY += 20;
+      hLine(totY);
+
+      // IGST
+      totY += 8;
+      const totalTax = parseFloat(order.totalIGST || 0) + parseFloat(order.totalCGST || 0) + parseFloat(order.totalSGST || 0);
+      doc.text('IGST', totalsLabelX, totY, { align: 'right', width: totalsLabelW });
+      doc.text(formatCurrency(totalTax), col.total, totY, { align: 'right', width: totalsValW });
+      totY += 20;
+      doc.moveTo(LEFT, totY).lineTo(RIGHT, totY).stroke();
+
+      // Grand Total
+      totY += 8;
+      doc.fontSize(10).font(fontBold);
+      doc.text('Grand Total', totalsLabelX, totY, { align: 'right', width: totalsLabelW });
+      doc.text(formatCurrency(order.finalAmount || order.totalAmount || 0), col.total, totY, { align: 'right', width: totalsValW });
+      totY += 20;
+      hLine(totY); // Closing line for Grand Total
+
+      // Vertical line for totals block
+      vLine(col.total, y, totY);
+
+      y = totY;
+
+      // ===================== OUTER BORDER =====================
+      // Set border height to exactly wrap the content plus some footer space
+      const borderHeight = y - 40 + 40; 
+      doc.rect(LEFT, 40, WIDTH, borderHeight).stroke();
+
+      // ===================== FOOTER =====================
+      const footerY = 40 + borderHeight - 20;
+      // Red accent line above footer
+      doc.save();
+      doc.moveTo(LEFT + 1, footerY - 8).lineTo(RIGHT - 1, footerY - 8)
+         .strokeColor('#e74c3c').lineWidth(1).stroke();
+      doc.restore();
+      doc.strokeColor('#000').lineWidth(1);
+
+      doc.fontSize(7).font(fontRegular).fillColor('#e74c3c')
+         .text('This is a system-generated invoice. No seal or signature is required.', LEFT, footerY, { align: 'center', width: WIDTH });
+
+      doc.end();
+      stream.on('finish', () => resolve(invoiceNumber));
+      stream.on('error', reject);
+    } catch (err) {
+      reject(err);
+    }
+  });
+};
+
+// ===== CREATE INVOICE =====
+
 const createInvoice = async (req, res) => {
-  const { orderId, customerId } = req.body;
+  const { orderId } = req.body;
 
   try {
-    // Verify order exists
     const order = await Orders.findByPk(orderId, {
       include: [
-        {
-          model: Customers,
-          as: 'customer',
-          attributes: ['id', 'name', 'email', 'phone', 'address', 'city', 'state', 'country', 'postalCode']
-        },
-        {
-          model: require('../../models/orders/orderItems.model'),
-          as: 'OrderItems',
-        }
+        { model: Customers, as: 'Customer' },
+        { model: require('../../models/orders/orderItems.model'), as: 'OrderItems' }
       ]
     });
-    
-    if (!order) {
-      return res.status(404).json({ success: false, message: "Order not found" });
-    }
 
-    // Check if invoice already exists for this order
+    if (!order) return res.status(404).json({ success: false, message: "Order not found" });
+
     const existingInvoice = await Invoice.findOne({ where: { orderId } });
     if (existingInvoice) {
-      return res.status(400).json({ 
-        success: false, 
-        message: "Invoice already exists for this order",
-        data: existingInvoice
-      });
+      // If it's an old PNG invoice, we want to regenerate it as a PDF
+      if (existingInvoice.invoiceFile && existingInvoice.invoiceFile.endsWith('.png')) {
+        await existingInvoice.destroy();
+      } else {
+        return res.status(200).json({ success: true, data: existingInvoice });
+      }
     }
 
-    // Company information (should come from database/config)
     const companyInfo = {
       name: 'Rabbit Finch',
-      address: 'Flat No.t-1, 3rd Floor, Shankar Residency,',
-      address2: 'Sadanand Bhavan Road, Near Arya Samaj, Visveswarapuram, Basavanagudi,',
-      city: 'Bengaluru',
-      postalCode: '560004',
-      state: 'Karnataka',
-      stateCode: 'Karnataka',
-      country: 'India',
-      gstin: '29AABCM2689R1ZN', // Changed to 29 for Karnataka
+      address1: 'Flat No.t-1, 3rd Floor, Shankar Residency,',
+      address2: 'Sadanand Bhavan Road, Near Arya Samaj,',
+      address3: 'Visveswarapuram, Basavanagudi,',
+      address4: 'Bengaluru, Karnataka - 560004',
+      gstin: '29AABCM2689R1ZN',
       email: 'info@rabbitnfinch.com',
-      logo: 'rabbitnfinch',
       invoicePrefix: 'RF'
     };
 
-    // Generate HTML invoice
-    const invoiceHtml = generateInvoiceHTML(order, companyInfo);
+    const uploadsDir = path.join(__dirname, '../../uploads/invoices');
+    if (!fs.existsSync(uploadsDir)) fs.mkdirSync(uploadsDir, { recursive: true });
 
-    // Create uploads directory if it doesn't exist
-    const uploadsDir = path.join(__dirname, '../../uploads');
-    const invoicesDir = path.join(uploadsDir, 'invoices');
-    if (!fs.existsSync(uploadsDir)) {
-      fs.mkdirSync(uploadsDir, { recursive: true });
-    }
-    if (!fs.existsSync(invoicesDir)) {
-      fs.mkdirSync(invoicesDir, { recursive: true });
-    }
+    const invoiceFileName = `invoice_${orderId}_${Date.now()}.pdf`;
+    const invoiceFilePath = path.join(uploadsDir, invoiceFileName);
 
-    // Generate PNG IMAGE from HTML using Puppeteer
-    const invoiceFileName = `invoice_${orderId}_${Date.now()}.png`;
-    const invoiceFilePath = path.join(invoicesDir, invoiceFileName);
-
-    const browser = await puppeteer.launch({
-      headless: 'new',
-      args: ['--no-sandbox', '--disable-setuid-sandbox']
-    });
-    
-    const page = await browser.newPage();
-    
-    // Set viewport size to A4 dimensions (794 x 1123 pixels at 96 DPI)
-    await page.setViewport({
-      width: 794,
-      height: 1123,
-      deviceScaleFactor: 2 // Higher quality image (2x resolution)
-    });
-    
-    await page.setContent(invoiceHtml, { waitUntil: 'networkidle0' });
-    
-    // Take screenshot as PNG
-    await page.screenshot({
-      path: invoiceFilePath,
-      type: 'png',
-      fullPage: false,
-      clip: {
-        x: 0,
-        y: 0,
-        width: 794,
-        height: 1123
-      }
-    });
-    
-    await browser.close();
+    await generatePDFInvoice(order, companyInfo, invoiceFilePath);
 
     const newInvoice = await Invoice.create({
       orderId,
@@ -580,101 +477,39 @@ const createInvoice = async (req, res) => {
 
     res.json({
       success: true,
-      message: "Invoice created successfully as image",
+      message: "Invoice created successfully as PDF",
       data: newInvoice,
-      invoiceUrl: `/api/invoices/view/${invoiceFileName}`
+      invoiceUrl: `/order/invoices/view/${invoiceFileName}`
     });
   } catch (error) {
-    console.error("Error creating invoice:", error);
-    res.status(500).json({ 
-      success: false, 
-      message: "Failed to create invoice",
-      error: error.message 
-    });
+    console.error("❌ [Invoice Error]:", error);
+    res.status(500).json({ success: false, message: "Failed to generate invoice", error: error.message });
   }
 };
 
-// View invoice image
 const viewInvoice = (req, res) => {
   const { filename } = req.params;
-  const invoicesDir = path.join(__dirname, '../../uploads/invoices');
-  const filePath = path.join(invoicesDir, filename);
+  const filePath = path.join(__dirname, '../../uploads/invoices', filename);
 
-  // Security check: ensure filename doesn't contain path traversal
-  if (filename.includes('..') || filename.includes('/') || filename.includes('\\')) {
-    return res.status(400).json({ 
-      success: false, 
-      message: 'Invalid filename' 
-    });
-  }
-
-  // Check if file exists
   if (fs.existsSync(filePath)) {
-    // Determine content type based on file extension
     const ext = path.extname(filename).toLowerCase();
-    let contentType = 'image/png';
-    
-    if (ext === '.jpg' || ext === '.jpeg') {
-      contentType = 'image/jpeg';
-    } else if (ext === '.pdf') {
-      contentType = 'application/pdf';
-    }
-    
-    // Set proper headers
+    const contentType = ext === '.pdf' ? 'application/pdf' : 'image/png';
     res.setHeader('Content-Type', contentType);
     res.setHeader('Content-Disposition', `inline; filename="${filename}"`);
-    
-    // Stream the file
-    const fileStream = fs.createReadStream(filePath);
-    fileStream.pipe(res);
-    
-    fileStream.on('error', (error) => {
-      console.error('Error streaming invoice:', error);
-      res.status(500).json({ 
-        success: false, 
-        message: 'Error reading invoice file' 
-      });
-    });
+    fs.createReadStream(filePath).pipe(res);
   } else {
-    res.status(404).json({ 
-      success: false, 
-      message: 'Invoice file not found' 
-    });
+    res.status(404).json({ success: false, message: 'File not found' });
   }
 };
 
-// Download invoice image
 const downloadInvoice = (req, res) => {
   const { filename } = req.params;
-  const invoicesDir = path.join(__dirname, '../../uploads/invoices');
-  const filePath = path.join(invoicesDir, filename);
-
-  // Security check
-  if (filename.includes('..') || filename.includes('/') || filename.includes('\\')) {
-    return res.status(400).json({ 
-      success: false, 
-      message: 'Invalid filename' 
-    });
-  }
+  const filePath = path.join(__dirname, '../../uploads/invoices', filename);
 
   if (fs.existsSync(filePath)) {
-    const ext = path.extname(filename).toLowerCase();
-    let contentType = 'image/png';
-    
-    if (ext === '.jpg' || ext === '.jpeg') {
-      contentType = 'image/jpeg';
-    } else if (ext === '.pdf') {
-      contentType = 'application/pdf';
-    }
-    
-    res.setHeader('Content-Type', contentType);
-    res.setHeader('Content-Disposition', `attachment; filename="${filename}"`);
-    res.sendFile(filePath);
+    res.download(filePath);
   } else {
-    res.status(404).json({ 
-      success: false, 
-      message: 'Invoice file not found' 
-    });
+    res.status(404).json({ success: false, message: 'File not found' });
   }
 };
 
