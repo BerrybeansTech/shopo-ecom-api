@@ -37,6 +37,22 @@ const OrderItems = sequelize.define(
     totalPrice: {
       type: DataTypes.BIGINT,
     },
+    gst: {
+      type: DataTypes.FLOAT,
+      defaultValue: 0,
+    },
+    cgst: {
+      type: DataTypes.FLOAT,
+      defaultValue: 0,
+    },
+    sgst: {
+      type: DataTypes.FLOAT,
+      defaultValue: 0,
+    },
+    igst: {
+      type: DataTypes.FLOAT,
+      defaultValue: 0,
+    },
     isActive: {
       type: DataTypes.BOOLEAN,
       defaultValue: true,

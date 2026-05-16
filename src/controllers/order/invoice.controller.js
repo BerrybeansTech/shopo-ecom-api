@@ -127,11 +127,15 @@ const generateInvoiceHTML = (order, companyInfo) => {
   });
   const invoiceNumber = `${companyInfo.invoicePrefix || 'INV'}/${new Date().getFullYear()}-${String(order.id).padStart(6, '0')}`;
 
-  // Calculate IGST (18% standard rate in India)
-  const igstRate = 18;
-  const subtotal = order.OrderItems?.reduce((sum, item) => sum + (parseFloat(item.totalPrice) || 0), 0) || order.subTotal || 0;
-  const igstAmount = (subtotal * igstRate) / 100;
-  const grandTotal = subtotal + igstAmount;
+  // Use stored GST values from the order
+  const subtotal = parseFloat(order.subTotal || 0);
+  const totalCGST = parseFloat(order.totalCGST || 0);
+  const totalSGST = parseFloat(order.totalSGST || 0);
+  const totalIGST = parseFloat(order.totalIGST || 0);
+  const totalGstAmount = totalCGST + totalSGST + totalIGST;
+  const grandTotal = subtotal + totalGstAmount + (parseFloat(order.shippingCharge) || 0);
+
+  const isInterState = totalIGST > 0;
 
   return `
 <!DOCTYPE html>
@@ -358,8 +362,6 @@ const generateInvoiceHTML = (order, companyInfo) => {
                 ${companyInfo.city || ''}, ${companyInfo.state || ''}<br>
                 ${companyInfo.country || 'India'} ${companyInfo.postalCode || ''}<br>
                 ${companyInfo.stateCode || 'Maharashtra'}, India<br>
-                <strong>PAN:</strong> ${companyInfo.pan || ''}<br>
-                <strong>CIN:</strong> ${companyInfo.cin || ''}<br>
                 <strong>GSTIN:</strong> ${companyInfo.gstin || ''}<br>
                 ${companyInfo.email || ''}
             </div>
@@ -411,8 +413,9 @@ const generateInvoiceHTML = (order, companyInfo) => {
                 <tr>
                     <th>Item & Description</th>
                     <th>Qty</th>
-                    <th>Rate</th>
-                    <th>Total</th>
+                    <th>Taxable Rate</th>
+                    ${isInterState ? '<th>IGST Amount</th>' : '<th>CGST+SGST</th>'}
+                    <th>Total (Incl. Tax)</th>
                 </tr>
             </thead>
             <tbody>
@@ -422,7 +425,8 @@ const generateInvoiceHTML = (order, companyInfo) => {
                     <td>${item.productName || 'Product'}</td>
                     <td class="center">${item.quantity || 1}</td>
                     <td class="number">₹${parseFloat(item.unitPrice || 0).toFixed(2)}</td>
-                    <td class="number">₹${parseFloat(item.totalPrice || 0).toFixed(2)}</td>
+                    <td class="number">₹${(parseFloat(item.cgst || 0) + parseFloat(item.sgst || 0) + parseFloat(item.igst || 0)).toFixed(2)}</td>
+                    <td class="number">₹${(parseFloat(item.totalPrice || 0) + parseFloat(item.cgst || 0) + parseFloat(item.sgst || 0) + parseFloat(item.igst || 0)).toFixed(2)}</td>
                 </tr>
                 `).join('')
                     : `<tr><td colspan="4" style="text-align: center;">No items found</td></tr>`
@@ -436,10 +440,24 @@ const generateInvoiceHTML = (order, companyInfo) => {
                 <div class="totals-cell label">Subtotal</div>
                 <div class="totals-cell amount">₹${subtotal.toFixed(2)}</div>
             </div>
+            ${isInterState ? `
             <div class="totals-row">
-                <div class="totals-cell label">IGST (${igstRate}%)</div>
-                <div class="totals-cell amount">₹${igstAmount.toFixed(2)}</div>
+                <div class="totals-cell label">IGST</div>
+                <div class="totals-cell amount">₹${totalIGST.toFixed(2)}</div>
+            </div>` : `
+            <div class="totals-row">
+                <div class="totals-cell label">CGST</div>
+                <div class="totals-cell amount">₹${totalCGST.toFixed(2)}</div>
             </div>
+            <div class="totals-row">
+                <div class="totals-cell label">SGST</div>
+                <div class="totals-cell amount">₹${totalSGST.toFixed(2)}</div>
+            </div>`}
+            ${order.shippingCharge > 0 ? `
+            <div class="totals-row">
+                <div class="totals-cell label">Shipping Charge</div>
+                <div class="totals-cell amount">₹${parseFloat(order.shippingCharge).toFixed(2)}</div>
+            </div>` : ''}
             <div class="totals-row grand-total">
                 <div class="totals-cell label">Grand Total</div>
                 <div class="totals-cell amount">₹${grandTotal.toFixed(2)}</div>
@@ -492,20 +510,18 @@ const createInvoice = async (req, res) => {
 
     // Company information (should come from database/config)
     const companyInfo = {
-      name: 'Microline India Private Limited',
-      address: 'Eucharistic Congress Building No.2,',
-      address2: '2nd Floor, 5th Convent Street, Apollo Bunder, Colaba,',
-      city: 'Mumbai',
-      postalCode: '400001',
-      state: 'Maharashtra',
-      stateCode: 'Maharashtra',
+      name: 'Rabbit Finch',
+      address: 'Flat No.t-1, 3rd Floor, Shankar Residency,',
+      address2: 'Sadanand Bhavan Road, Near Arya Samaj, Visveswarapuram, Basavanagudi,',
+      city: 'Bengaluru',
+      postalCode: '560004',
+      state: 'Karnataka',
+      stateCode: 'Karnataka',
       country: 'India',
-      pan: 'AABCM2689R',
-      cin: 'U72900MH1996PTC096678',
-      gstin: '27AABCM2689R1ZN',
-      email: 'accounts1.mumbai@microlineindia.com',
-      logo: 'microline',
-      invoicePrefix: 'MI/B/25-26'
+      gstin: '29AABCM2689R1ZN', // Changed to 29 for Karnataka
+      email: 'info@rabbitnfinch.com',
+      logo: 'rabbitnfinch',
+      invoicePrefix: 'RF'
     };
 
     // Generate HTML invoice

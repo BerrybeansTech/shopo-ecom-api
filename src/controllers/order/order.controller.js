@@ -302,6 +302,7 @@ const createOrder = async (req, res) => {
       customerId,
       totalItems,
       shippingAddress,
+      shippingState,
       subTotal,
       tax,
       shippingCharge,
@@ -311,6 +312,60 @@ const createOrder = async (req, res) => {
       orderNote,
       productItems,
     } = req.body;
+
+    // GST Calculation Logic (Backend as Source of Truth)
+    const sellerState = "Karnataka";
+    const isSameState = shippingState?.toLowerCase().trim() === sellerState.toLowerCase().trim();
+
+    const productIds = productItems.map(item => item.productId).filter(id => id);
+    const dbProducts = await Product.findAll({ where: { id: productIds } });
+    const productMap = dbProducts.reduce((map, p) => {
+      map[p.id] = p;
+      return map;
+    }, {});
+
+    let calculatedSubTotal = 0;
+    let totalCGST = 0;
+    let totalSGST = 0;
+    let totalIGST = 0;
+    let calculatedTotalTax = 0;
+
+    const processedProductItems = productItems.map(item => {
+      const product = productMap[item.productId];
+      const gstPercentage = product ? parseFloat(product.gst || 0) : 0;
+      const unitPrice = parseFloat(item.unitPrice || product?.sellingPrice || 0);
+      const quantity = parseInt(item.quantity || 1);
+      const itemTotal = unitPrice * quantity;
+      
+      calculatedSubTotal += itemTotal;
+      
+      let cgst = 0, sgst = 0, igst = 0;
+      const gstAmount = (itemTotal * gstPercentage) / 100;
+
+      if (isSameState) {
+        cgst = gstAmount / 2;
+        sgst = gstAmount / 2;
+        totalCGST += cgst;
+        totalSGST += sgst;
+      } else {
+        igst = gstAmount;
+        totalIGST += igst;
+      }
+      
+      calculatedTotalTax += gstAmount;
+
+      return {
+        ...item,
+        unitPrice,
+        totalPrice: itemTotal,
+        gst: gstPercentage,
+        cgst,
+        sgst,
+        igst
+      };
+    });
+
+    const finalCalculatedTotal = calculatedSubTotal + calculatedTotalTax + (parseFloat(shippingCharge) || 0);
 
     t = await sequelize.transaction();
 
@@ -328,11 +383,14 @@ const createOrder = async (req, res) => {
         customerId,
         totalItems,
         shippingAddress,
-        subTotal,
-        tax,
+        subTotal: calculatedSubTotal,
+        tax: calculatedTotalTax,
+        totalCGST,
+        totalSGST,
+        totalIGST,
         shippingCharge,
-        totalAmount,
-        finalAmount,
+        totalAmount: finalCalculatedTotal,
+        finalAmount: finalCalculatedTotal,
         paymentMethod,
         orderNote,
         razorpayOrderId: req.body.razorpayOrderId || null,
@@ -342,31 +400,8 @@ const createOrder = async (req, res) => {
       { transaction: t }
     );
 
-    if (productItems && Array.isArray(productItems) && productItems.length > 0) {
-      const productIds = productItems.map(item => item.productId).filter(id => id);
-
-      if (productIds.length > 0) {
-        const existingProducts = await Product.findAll({
-          where: { id: productIds },
-          attributes: ["id"],
-          transaction: t,
-        });
-
-        const existingProductIds = existingProducts.map(p => p.id);
-        const invalidProductIds = productIds.filter(
-          id => !existingProductIds.includes(id)
-        );
-
-        if (invalidProductIds.length > 0) {
-          await t.rollback();
-          return res.status(400).json({
-            success: false,
-            message: `Invalid product IDs: ${invalidProductIds.join(", ")}`,
-          });
-        }
-      }
-
-      const itemsToCreate = productItems.map(item => ({
+    if (processedProductItems && Array.isArray(processedProductItems) && processedProductItems.length > 0) {
+      const itemsToCreate = processedProductItems.map(item => ({
         ...item,
         orderId: newOrder.id,
       }));

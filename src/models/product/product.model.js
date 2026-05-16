@@ -49,6 +49,10 @@ const Product = sequelize.define('Product', {
   gst: {
     type: DataTypes.FLOAT
   },
+  hsnCode: {
+    type: DataTypes.STRING,
+    allowNull: true
+  },
   remarks: {
     type: DataTypes.TEXT,
     allowNull: true

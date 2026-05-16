@@ -29,6 +29,21 @@ const Orders = sequelize.define('Orders', {
     type: DataTypes.INTEGER,
     allowNull: true,
   },
+  totalCGST: {
+    type: DataTypes.FLOAT,
+    allowNull: true,
+    defaultValue: 0,
+  },
+  totalSGST: {
+    type: DataTypes.FLOAT,
+    allowNull: true,
+    defaultValue: 0,
+  },
+  totalIGST: {
+    type: DataTypes.FLOAT,
+    allowNull: true,
+    defaultValue: 0,
+  },
   shippingCharge: {
     type: DataTypes.INTEGER,
     allowNull: true,
