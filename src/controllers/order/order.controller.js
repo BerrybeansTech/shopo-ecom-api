@@ -512,19 +512,73 @@ const trackOrder = async (req, res) => {
       });
     }
 
+    // Default response if shipment not yet created or tracked
+    const defaultResponse = {
+      orderId: order.id,
+      awbCode: order.awbCode || "Pending",
+      courier: order.courierName || "Assigning Courier",
+      status: "Order Placed",
+      estimatedDelivery: "TBA",
+      trackingUrl: order.trackingUrl || null,
+      timeline: [
+        {
+          time: order.createdAt,
+          activity: "Order Placed",
+          location: "Rabbit Finch"
+        }
+      ]
+    };
+
     if (!order.shipmentId) {
-      return res.status(400).json({
-        success: false,
-        message: "Shipment not yet created for this order",
+      return res.status(200).json({
+        success: true,
+        data: defaultResponse,
       });
     }
 
-    const trackingData = await shiprocketService.trackShipment(order.shipmentId);
+    try {
+      const trackingData = await shiprocketService.trackShipment(order.shipmentId);
+      
+      // Shiprocket tracking response structure: response.tracking_data.shipment_track[0]
+      const track = trackingData?.tracking_data?.shipment_track?.[0];
+      const activities = track?.shipment_track_activities || [];
 
-    return res.status(200).json({
-      success: true,
-      data: trackingData,
-    });
+      const responseData = {
+        orderId: order.id,
+        awbCode: track?.awb_code || order.awbCode || "Pending",
+        courier: track?.courier_name || order.courierName || "Shiprocket",
+        status: track?.current_status || order.shipmentStatus || "In Transit",
+        estimatedDelivery: track?.edd || order.estimatedDelivery || "TBA",
+        trackingUrl: track?.tracking_url || order.trackingUrl || null,
+        timeline: activities.length > 0 ? activities.map(activity => ({
+          time: activity.date,
+          activity: activity.activity,
+          location: activity.location
+        })) : defaultResponse.timeline
+      };
+
+      // Sync DB if status or EDD updated
+      if (track?.current_status || track?.edd) {
+        await order.update({
+          shipmentStatus: track?.current_status || order.shipmentStatus,
+          estimatedDelivery: track?.edd || order.estimatedDelivery,
+          awbCode: track?.awb_code || order.awbCode,
+          courierName: track?.courier_name || order.courierName,
+          trackingUrl: track?.tracking_url || order.trackingUrl
+        });
+      }
+
+      return res.status(200).json({
+        success: true,
+        data: responseData,
+      });
+    } catch (shiprocketError) {
+      console.warn("⚠️ [Shiprocket] Tracking API failed, returning DB status:", shiprocketError.message);
+      return res.status(200).json({
+        success: true,
+        data: defaultResponse,
+      });
+    }
   } catch (error) {
     console.error("Error tracking order:", error);
     return res.status(500).json({

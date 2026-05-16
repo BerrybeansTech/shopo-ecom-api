@@ -57,9 +57,16 @@ const processShiprocketShipment = async (orderId) => {
 
         if (response && response.order_id) {
             console.log("✅ [Shiprocket] Shipment Created Successfully! Shiprocket Order ID:", response.order_id);
+            
+            // Extract potential tracking info if returned (depends on Shiprocket API version/config)
+            const awbCode = response.awb_code || response.shipment_track?.[0]?.awb_code;
+            const courierName = response.courier_name || response.shipment_track?.[0]?.courier_name;
+
             await order.update({
                 shiprocketOrderId: response.order_id,
                 shipmentId: response.shipment_id,
+                awbCode: awbCode || order.awbCode,
+                courierName: courierName || order.courierName,
                 shipmentStatus: 'pending',
                 shiprocketResponse: response
             });

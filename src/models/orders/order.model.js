@@ -108,6 +108,10 @@ const Orders = sequelize.define('Orders', {
     type: DataTypes.JSON,
     allowNull: true,
   },
+  estimatedDelivery: {
+    type: DataTypes.STRING,
+    allowNull: true,
+  },
   orderNote: {
     type: DataTypes.TEXT,
     allowNull: true,
