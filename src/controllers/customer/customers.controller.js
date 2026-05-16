@@ -768,6 +768,46 @@ const checkUserExists = async (req, res) => {
   }
 };
 
+const refreshToken = async (req, res) => {
+  const token = req.cookies.refreshToken;
+
+  if (!token) {
+    return res.status(401).json({ success: false, message: "No refresh token" });
+  }
+
+  try {
+    const { verifyRefreshToken } = require("../../services/jwt.service");
+    const payload = verifyRefreshToken(token);
+
+    // Filter payload to only include necessary fields
+    const newPayload = {
+      id: payload.id,
+      name: payload.name,
+      email: payload.email,
+      phone: payload.phone,
+    };
+
+    const accessToken = generateAccessToken(newPayload);
+
+    res.json({
+      success: true,
+      accessToken,
+    });
+  } catch (error) {
+    console.error("Refresh token error:", error);
+    res.status(403).json({ success: false, message: "Invalid refresh token" });
+  }
+};
+
+const logout = async (req, res) => {
+  res.clearCookie("refreshToken", {
+    httpOnly: true,
+    secure: process.env.NODE_ENV === "production",
+    sameSite: "Strict",
+  });
+  res.json({ success: true, message: "Logged out successfully" });
+};
+
 module.exports = {
   getAllCustomers,
   getCustomersById,
@@ -780,5 +820,7 @@ module.exports = {
   getUserWishlist,
   updateWishlist,
   clearWishlist,
-  googleLogin
+  googleLogin,
+  refreshToken,
+  logout
 };

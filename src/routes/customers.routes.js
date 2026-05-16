@@ -14,6 +14,8 @@ router.get('/get-customer/:id', authenticateToken.authenticateToken, CustomerCon
 router.post('/create-customer', CustomerController.createCustomers);
 router.post('/login', CustomerController.customerLogin);
 router.post('/google-login', CustomerController.googleLogin);
+router.post('/refresh-token', CustomerController.refreshToken);
+router.post('/logout', CustomerController.logout);
 router.post('/reset-password', CustomerController.resetPassword);
 router.put('/update-customer', authenticateToken.authenticateToken, CustomerController.updateCustomers);
 router.delete('/delete-customer/:id', authenticateToken.authenticateToken, CustomerController.deleteCustomers);

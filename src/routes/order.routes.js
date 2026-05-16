@@ -6,10 +6,11 @@ const { authenticateToken } = require('../middlewares/authenticateJWT');
 
 // Order routes
 router.get('/get-all-orders', authenticateToken, orderController.getAllOrders);
-router.get('/get-order/:id', authenticateToken, orderController.getOrderDetial);
+router.get('/get-order/:id', authenticateToken, orderController.getOrderDetail);
 router.get('/get-customer-order/:id', authenticateToken, orderController.getCustomerOrder);
 router.post('/create-order', authenticateToken, orderController.createOrder);
 router.put('/update-order', authenticateToken, orderController.updateOrder);
+router.get('/track-order/:id', authenticateToken, orderController.trackOrder);
 
 
 // Invoice routes

@@ -129,7 +129,7 @@ const generateInvoiceHTML = (order, companyInfo) => {
 
   // Calculate IGST (18% standard rate in India)
   const igstRate = 18;
-  const subtotal = order.productInfo?.reduce((sum, item) => sum + (item.total || 0), 0) || order.subTotal || 0;
+  const subtotal = order.OrderItems?.reduce((sum, item) => sum + (parseFloat(item.totalPrice) || 0), 0) || order.subTotal || 0;
   const igstAmount = (subtotal * igstRate) / 100;
   const grandTotal = subtotal + igstAmount;
 
@@ -416,13 +416,13 @@ const generateInvoiceHTML = (order, companyInfo) => {
                 </tr>
             </thead>
             <tbody>
-                ${order.productInfo && order.productInfo.length > 0 
-                    ? order.productInfo.map(item => `
+                ${order.OrderItems && order.OrderItems.length > 0 
+                    ? order.OrderItems.map(item => `
                 <tr>
                     <td>${item.productName || 'Product'}</td>
                     <td class="center">${item.quantity || 1}</td>
-                    <td class="number">₹${parseFloat(item.price || 0).toFixed(2)}</td>
-                    <td class="number">₹${parseFloat(item.total || 0).toFixed(2)}</td>
+                    <td class="number">₹${parseFloat(item.unitPrice || 0).toFixed(2)}</td>
+                    <td class="number">₹${parseFloat(item.totalPrice || 0).toFixed(2)}</td>
                 </tr>
                 `).join('')
                     : `<tr><td colspan="4" style="text-align: center;">No items found</td></tr>`
@@ -468,6 +468,10 @@ const createInvoice = async (req, res) => {
           model: Customers,
           as: 'customer',
           attributes: ['id', 'name', 'email', 'phone', 'address', 'city', 'state', 'country', 'postalCode']
+        },
+        {
+          model: require('../../models/orders/orderItems.model'),
+          as: 'OrderItems',
         }
       ]
     });

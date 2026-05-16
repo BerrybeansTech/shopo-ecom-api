@@ -319,7 +319,7 @@ Product.hasMany(OrderItems, { foreignKey: 'productId', onDelete: 'CASCADE' });
 OrderItems.belongsTo(Product, { foreignKey: 'productId' });
 
 // Invoice relationships
-Orders.hasOne(Invoice, { foreignKey: 'orderId', onDelete: 'CASCADE' });
+Orders.hasOne(Invoice, { foreignKey: 'orderId', as: 'invoice', onDelete: 'CASCADE' });
 Invoice.belongsTo(Orders, { foreignKey: 'orderId', as: 'order' });
 
 Customer.hasMany(Invoice, { foreignKey: 'customerId', onDelete: 'CASCADE' });

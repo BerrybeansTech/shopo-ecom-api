@@ -11,9 +11,14 @@ const generateRefreshToken = (payload) => {
   return jwt.sign(payload, REFRESH_SECRET, { expiresIn: process.env.REFRESH_TOKEN_EXPIRY || '7d' });
 };
 
+const verifyRefreshToken = (token) => {
+  return jwt.verify(token, REFRESH_SECRET);
+};
+
 module.exports = {
   generateAccessToken,
   generateRefreshToken,
+  verifyRefreshToken,
   ACCESS_SECRET,
   REFRESH_SECRET,
 };

@@ -2,6 +2,8 @@ const Razorpay = require('razorpay');
 const express = require('express');
 const router = express.Router();
 const crypto = require('crypto');
+const Orders = require('../../models/orders/order.model');
+const { processShiprocketShipment } = require('../../utils/shipmentHelper');
 
 
 const razorpay = new Razorpay({
@@ -36,25 +38,48 @@ const createOrder = async (req, res) => {
     }
 }
 
-const verifyPayment = (req, res) => {
+const verifyPayment = async (req, res) => {
     const { razorpay_order_id, razorpay_payment_id, razorpay_signature } = req.body;
 
     if (!razorpay_order_id || !razorpay_payment_id || !razorpay_signature) {
         return res.status(400).json({ success: false, message: 'Missing payment details' });
     }
 
-    const key_secret = process.env.RAZORPAY_KEY_SECRET;
-    const hash = crypto.createHmac('sha256', key_secret)
-        .update(`${razorpay_order_id}|${razorpay_payment_id}`)
-        .digest('hex');
+    try {
+        const key_secret = process.env.RAZORPAY_KEY_SECRET;
+        const hash = crypto.createHmac('sha256', key_secret)
+            .update(`${razorpay_order_id}|${razorpay_payment_id}`)
+            .digest('hex');
 
-    console.log('Generated Hash:', hash);
-    console.log('Received Signature:', razorpay_signature);
+        if (hash === razorpay_signature) {
+            // Update order status in database
+            const [updatedRows] = await Orders.update(
+                { 
+                    paymentStatus: 'paid', 
+                    status: 'pending', // or 'processing' if you have that enum
+                    razorpayPaymentId: razorpay_payment_id,
+                    razorpaySignature: razorpay_signature
+                },
+                { where: { razorpayOrderId: razorpay_order_id } }
+            );
 
-    if (hash === razorpay_signature) {
-        res.json({ success: true, message: 'Payment verified successfully' });
-    } else {
-        res.status(400).json({ success: false, message: 'Payment verification failed' });
+            if (updatedRows === 0) {
+                console.warn(`Payment verified for ${razorpay_order_id} but no matching order found in database.`);
+            } else {
+                // Find the order to get its ID and trigger shipment
+                const order = await Orders.findOne({ where: { razorpayOrderId: razorpay_order_id } });
+                if (order) {
+                    processShiprocketShipment(order.id);
+                }
+            }
+
+            res.json({ success: true, message: 'Payment verified and order updated successfully' });
+        } else {
+            res.status(400).json({ success: false, message: 'Payment verification failed' });
+        }
+    } catch (error) {
+        console.error("Error verifying payment:", error);
+        res.status(500).json({ success: false, message: 'Internal server error during verification' });
     }
 }
 

@@ -46,8 +46,52 @@ const Orders = sequelize.define('Orders', {
     allowNull: true,
   },
   paymentStatus: {
-    type: DataTypes.ENUM('pending', 'paid', 'pending-refund', 'refunded'),
+    type: DataTypes.ENUM('pending', 'paid', 'failed', 'refunded'),
     defaultValue: 'pending',
+  },
+  shipmentStatus: {
+    type: DataTypes.ENUM('pending', 'pickup_scheduled', 'shipped', 'in_transit', 'delivered', 'returned', 'cancelled'),
+    defaultValue: 'pending',
+  },
+  razorpayOrderId: {
+    type: DataTypes.STRING,
+    allowNull: true,
+  },
+  razorpayPaymentId: {
+    type: DataTypes.STRING,
+    allowNull: true,
+  },
+  razorpaySignature: {
+    type: DataTypes.TEXT,
+    allowNull: true,
+  },
+  shipmentId: {
+    type: DataTypes.STRING,
+    allowNull: true,
+  },
+  shiprocketOrderId: {
+    type: DataTypes.STRING,
+    allowNull: true,
+  },
+  awbCode: {
+    type: DataTypes.STRING,
+    allowNull: true,
+  },
+  courierName: {
+    type: DataTypes.STRING,
+    allowNull: true,
+  },
+  trackingNumber: {
+    type: DataTypes.STRING,
+    allowNull: true,
+  },
+  trackingUrl: {
+    type: DataTypes.TEXT,
+    allowNull: true,
+  },
+  shiprocketResponse: {
+    type: DataTypes.JSON,
+    allowNull: true,
   },
   orderNote: {
     type: DataTypes.TEXT,

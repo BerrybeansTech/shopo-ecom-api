@@ -3,6 +3,10 @@ const Orders = require("../../models/orders/order.model");
 const Product = require("../../models/product/product.model");
 const OrderItems = require("../../models/orders/orderItems.model");
 const Customer = require("../../models/customer/customers.model");
+const Invoice = require("../../models/orders/invoice.model");
+const { processShiprocketShipment } = require("../../utils/shipmentHelper");
+const shiprocketService = require("../../services/shiprocket.service");
+
 
 const getAllOrders = async (req, res) => {
   try {
@@ -41,6 +45,10 @@ const getAllOrders = async (req, res) => {
               as: "Product",
             },
           ],
+        },
+        {
+          model: Invoice,
+          as: "invoice",
         },
       ],
       order: [["createdAt", "DESC"]],
@@ -136,6 +144,10 @@ const getCustomerOrder = async (req, res) => {
             },
           ],
         },
+        {
+          model: Invoice,
+          as: "invoice",
+        },
       ],
       order: [["createdAt", "DESC"]],
       limit,
@@ -201,7 +213,7 @@ const getCustomerOrder = async (req, res) => {
 };
 
 
-const getOrderDetial = async (req, res) => {
+const getOrderDetail = async (req, res) => {
   try {
     const { id } = req.params;
 
@@ -224,6 +236,10 @@ const getOrderDetial = async (req, res) => {
               as: "Product",
             },
           ],
+        },
+        {
+          model: Invoice,
+          as: "invoice",
         },
       ],
     });
@@ -319,6 +335,7 @@ const createOrder = async (req, res) => {
         finalAmount,
         paymentMethod,
         orderNote,
+        razorpayOrderId: req.body.razorpayOrderId || null,
         paymentStatus: "pending",
         status: "pending",
       },
@@ -358,6 +375,18 @@ const createOrder = async (req, res) => {
     }
 
     await t.commit();
+    console.log("💳 Payment Method Received:", paymentMethod);
+
+    const normalizedPaymentMethod = paymentMethod?.trim().toLowerCase();
+    console.log("💳 Normalized Payment Method:", normalizedPaymentMethod);
+
+    // Trigger Shiprocket for COD orders
+    if (normalizedPaymentMethod === 'cod') {
+        console.log("🚛 Triggering Shiprocket for COD Order...");
+        await processShiprocketShipment(newOrder.id);
+    } else {
+        console.log("ℹ️ Shiprocket skipped: Payment method is not 'cod' (Current:", paymentMethod, ")");
+    }
 
     return res.status(201).json({
       success: true,
@@ -365,7 +394,13 @@ const createOrder = async (req, res) => {
       data: newOrder,
     });
   } catch (error) {
-    if (t) await t.rollback();
+    if (t && !t.finished) {
+        try {
+            await t.rollback();
+        } catch (rollbackError) {
+            console.error("Rollback failed:", rollbackError.message);
+        }
+    }
 
     return res.status(500).json({
       success: false,
@@ -430,12 +465,49 @@ const deleteOrder = async (req, res) => {
   }
 };
 
+const trackOrder = async (req, res) => {
+  try {
+    const { id } = req.params; // Internal Order ID
+    const order = await Orders.findByPk(id);
+
+    if (!order) {
+      return res.status(404).json({
+        success: false,
+        message: "Order not found",
+      });
+    }
+
+    if (!order.shipmentId) {
+      return res.status(400).json({
+        success: false,
+        message: "Shipment not yet created for this order",
+      });
+    }
+
+    const trackingData = await shiprocketService.trackShipment(order.shipmentId);
+
+    return res.status(200).json({
+      success: true,
+      data: trackingData,
+    });
+  } catch (error) {
+    console.error("Error tracking order:", error);
+    return res.status(500).json({
+      success: false,
+      message: "Failed to track order",
+      error: error.message,
+    });
+  }
+};
+
 
 module.exports = {
   getAllOrders,
-  getOrderDetial,
+  getOrderDetail,
   getCustomerOrder,
   createOrder,
   updateOrder,
   deleteOrder,
+  trackOrder,
 };
+
