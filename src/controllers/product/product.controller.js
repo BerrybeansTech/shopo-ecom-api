@@ -295,7 +295,6 @@ const getAllProduct = async (req, res) => {
       offset,
       attributes: {
         exclude: [
-          "createdAt",
           "updatedAt",
           "galleryImage",
           "additionalInformation",
@@ -373,7 +372,7 @@ const getAllProduct = async (req, res) => {
         },
       ],
       // group: ["Product.id"],
-      subQuery: false,
+      subQuery: !((matchingColorIds && matchingColorIds.length) || (matchingSizeIds && matchingSizeIds.length)),
       order: [[sort, sortingOrder]],
     };
 
@@ -394,7 +393,7 @@ const getAllProduct = async (req, res) => {
 
       const bestSellerIds = bestSelling
         .map(item => item.productId)
-        .filter(Boolean); 
+        .filter(Boolean);
 
       if (!bestSellerIds.length) {
         return res.json({
@@ -431,13 +430,13 @@ const getAllProduct = async (req, res) => {
           const rawGallery = Array.isArray(data.galleryImage)
             ? data.galleryImage
             : JSON.parse(data.galleryImage);
-          
+
           galleryArray = (Array.isArray(rawGallery) ? rawGallery : [rawGallery])
             .flatMap(item => typeof item === 'string' ? item.split(',') : item)
             .filter(Boolean);
         } catch {
-          galleryArray = typeof data.galleryImage === 'string' 
-            ? data.galleryImage.split(',').filter(Boolean) 
+          galleryArray = typeof data.galleryImage === 'string'
+            ? data.galleryImage.split(',').filter(Boolean)
             : [];
         }
       }
@@ -671,13 +670,13 @@ const getProductById = async (req, res) => {
         const rawGallery = Array.isArray(product.galleryImage)
           ? product.galleryImage
           : JSON.parse(product.galleryImage);
-        
+
         galleryArray = (Array.isArray(rawGallery) ? rawGallery : [rawGallery])
           .flatMap(item => typeof item === 'string' ? item.split(',') : item)
           .filter(Boolean);
       } catch (err) {
-        galleryArray = typeof product.galleryImage === 'string' 
-          ? product.galleryImage.split(',').filter(Boolean) 
+        galleryArray = typeof product.galleryImage === 'string'
+          ? product.galleryImage.split(',').filter(Boolean)
           : [];
       }
     }
@@ -801,7 +800,7 @@ const createProduct = async (req, res) => {
       ? `${(process.env.FILE_PATH || "").replace(/[\\\[\]"]/g, "")}${req.files.thumbnailImage[0].filename.replace(/[\\\[\]"]/g, "")}`
       : null;
 
-      const galleryImage = req.files?.galleryImage
+    const galleryImage = req.files?.galleryImage
       ? req.files.galleryImage.map(
         (file) => `${(process.env.FILE_PATH || "").replace(/[\\\[\]"]/g, "")}${file.filename.replace(/[\\\[\]"]/g, "")}`
       )
@@ -892,12 +891,12 @@ const createProduct = async (req, res) => {
     cleanedProduct.thumbnailImage = cleanedProduct.thumbnailImage
       ? `${baseUrl}${cleanedProduct.thumbnailImage.replace(/[\\\[\]"]/g, "").replace(/^[\\\/]+/, "")}`
       : null;
-    
+
     let galleryArr = [];
     try {
       galleryArr = JSON.parse(cleanedProduct.galleryImage || "[]");
     } catch { galleryArr = []; }
-    
+
     cleanedProduct.galleryImage = (Array.isArray(galleryArr) ? galleryArr : [])
       .map(img => `${baseUrl}${img.replace(/[\\\[\]"]/g, "").replace(/^[\\\/]+/, "")}`);
 
@@ -1127,6 +1126,52 @@ const deleteProduct = async (req, res) => {
         .json({ success: false, message: "Product not found" });
     }
 
+    // Helper to robustly delete a file from all potential paths
+    const deleteFile = (imgPath) => {
+      if (!imgPath) return;
+      const cleanPath = imgPath.replace(/[\\\[\]"]/g, "").replace(/^[\\\/]+/, "").replace(/\\/g, '/');
+      const index = cleanPath.indexOf("uploads/");
+      const relativePath = index !== -1 ? cleanPath.slice(index) : `uploads/${path.basename(cleanPath)}`;
+
+      const possiblePaths = [
+        path.join(__dirname, "..", "..", "..", relativePath), // Root uploads (from src/controllers/product)
+        path.join(__dirname, "..", "..", relativePath),       // src/uploads
+        path.join(__dirname, "..", relativePath),             // original code's path
+        path.join(process.cwd(), relativePath)               // current working directory
+      ];
+
+      for (const fullPath of possiblePaths) {
+        if (fs.existsSync(fullPath)) {
+          try {
+            fs.unlinkSync(fullPath);
+            console.log(`Successfully deleted file: ${fullPath}`);
+            return;
+          } catch (err) {
+            console.error(`Failed to delete file: ${fullPath}`, err);
+          }
+        }
+      }
+    };
+
+    // 1. Delete thumbnail
+    if (ProductData.thumbnailImage) {
+      deleteFile(ProductData.thumbnailImage);
+    }
+
+    // 2. Delete gallery images
+    if (ProductData.galleryImage) {
+      let galleryArr = [];
+      try {
+        galleryArr = JSON.parse(ProductData.galleryImage);
+      } catch (e) {
+        galleryArr = typeof ProductData.galleryImage === 'string'
+          ? ProductData.galleryImage.split(',').filter(Boolean)
+          : [];
+      }
+
+      if (Array.isArray(galleryArr)) {
+        galleryArr.forEach((img) => deleteFile(img));
+      }
     // 1. Delete thumbnailImage
     if (ProductData.thumbnailImage) {
       const cleanThumbPath = typeof ProductData.thumbnailImage === "string" 

@@ -33,6 +33,7 @@ const sizeChartController = require("../controllers/product/sizeChart.controller
 
 router.get("/get-all-product", ProductController.getAllProduct);
 router.get("/get-product/:id", ProductController.getProductById);
+router.delete("/delete-product/:id", authenticateToken, ProductController.deleteProduct);
 router.post('/create-product', authenticateToken, upload.fields([
   { name: "thumbnailImage", maxCount: 1 },
   { name: "galleryImage", maxCount: 10 },
