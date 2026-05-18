@@ -45,6 +45,7 @@ router.put('/update-product', authenticateToken, upload.fields([
 ]), ProductController.updateProduct);
 
 router.put("/inventory/update", authenticateToken, ProductController.updateInventory);
+router.delete("/delete-product/:id", authenticateToken, ProductController.deleteProduct);
 
 
 router.post("/material/create", authenticateToken, MaterialController.createMaterial);
