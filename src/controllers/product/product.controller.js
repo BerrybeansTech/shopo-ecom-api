@@ -55,8 +55,13 @@ const getAllProduct = async (req, res) => {
       whereClause.fitTypeId = { [Op.in]: fitTypeArray };
     }
     if (occasion) {
-      const occasionArray = occasion.split(",").map((id) => Number(id.trim()));
-      whereClause.occasionId = { [Op.in]: occasionArray };
+      const occasionArray = occasion.split(",").map((id) => id.trim());
+      whereClause[Op.or] = occasionArray.flatMap((id) => [
+        { occasionId: id },
+        { occasionId: { [Op.like]: `${id},%` } },
+        { occasionId: { [Op.like]: `%,${id},%` } },
+        { occasionId: { [Op.like]: `%,${id}` } }
+      ]);
     }
 
     if (productMaterial || material) {
@@ -1040,6 +1045,16 @@ const updateProduct = async (req, res) => {
       thumbnailImage = `${(process.env.FILE_PATH || "").replace(/[\\\[\]"]/g, "")}${req.files.thumbnailImage[0].filename.replace(/[\\\[\]"]/g, "")}`;
     }
 
+    let parsedApparelDetails = {};
+    try {
+      parsedApparelDetails =
+        typeof aparelDetials === "string"
+          ? JSON.parse(aparelDetials)
+          : aparelDetials || {};
+    } catch (err) {
+      console.warn("Invalid aparelDetials JSON:", aparelDetials);
+    }
+
     // ✅ Save (store gallery as JSON string)
     await Product.update(
       {
@@ -1051,8 +1066,10 @@ const updateProduct = async (req, res) => {
         categoryId,
         subCategoryId,
         childCategoryId,
-        aparelDetials,
-        inventory,
+        productMaterialId: parsedApparelDetails.productMaterialId ? parseInt(parsedApparelDetails.productMaterialId, 10) : null,
+        fitTypeId: parsedApparelDetails.fitType ? parseInt(parsedApparelDetails.fitType, 10) : null,
+        occasionId: parsedApparelDetails.occasionId ? parseInt(parsedApparelDetails.occasionId, 10) : null,
+        seasonal: parsedApparelDetails.seasonal || null,
         mrp,
         sellingPrice,
         gst,
