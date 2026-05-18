@@ -9,5 +9,6 @@ const router = express.Router();
 
 router.post('/create-admin', AdminUSerController.createAdminUser);
 router.post('/login', AdminUSerController.adminLogin);
+router.post('/refresh-token', AdminUSerController.refreshToken);
 
 module.exports = router;

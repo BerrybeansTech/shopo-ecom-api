@@ -154,7 +154,38 @@ const adminLogin = async (req, res) => {
     res.status(500).json({ success: false, message: "Internal server error" });
   }
 };
+const refreshToken = async (req, res) => {
+  const token = req.cookies.refreshToken;
+
+  if (!token) {
+    return res.status(401).json({ success: false, message: "No refresh token" });
+  }
+
+  try {
+    const { verifyRefreshToken } = require("../../services/jwt.service");
+    const payload = verifyRefreshToken(token);
+
+    const newPayload = {
+      id: payload.id,
+      name: payload.name,
+      email: payload.email,
+      phone: payload.phone,
+    };
+
+    const accessToken = generateAccessToken(newPayload);
+
+    res.json({
+      success: true,
+      accessToken,
+    });
+  } catch (error) {
+    console.error("Admin refresh token error:", error);
+    res.status(403).json({ success: false, message: "Invalid refresh token" });
+  }
+};
+
 module.exports = {
   createAdminUser,
   adminLogin,
+  refreshToken,
 };
