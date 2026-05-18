@@ -19,6 +19,8 @@ const inventoryRoutes = require("./routes/inventory.routes");
 const blogRoutes = require("./routes/blog.routes");
 const offerRoutes = require("./routes/offer.routes.js");
 const paymentRoutes = require("./routes/payment.routes.js");
+const bannerRoutes = require("./routes/banner.routes.js");
+
 
 const app = express();
 
@@ -69,6 +71,8 @@ app.use("/order", orderRoutes);
 app.use("/blog", blogRoutes);
 app.use("/offer", offerRoutes);
 app.use("/payment", paymentRoutes);
+app.use("/banner", bannerRoutes);
+
 
 app.use(errorHandler);
 

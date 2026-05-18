@@ -18,6 +18,7 @@ const OrderItems = require("../models/orders/orderItems.model");
 const Invoice = require("../models/orders/invoice.model");
 const CustomerAddress = require("../models/customer/customerAddress.model");
 const ComboOffer = require("../models/offers/comboOffer.model");
+const Banner = require("../models/banner/banner.model");
 
 
 // ProductCategory → ProductSubCategory (One-to-Many)
@@ -354,6 +355,7 @@ module.exports = {
   Orders,
   OrderItems,
   Invoice,
+  Banner,
 };
 
 // Category.hasMany(SubCategory, {

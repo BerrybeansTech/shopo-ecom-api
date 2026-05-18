@@ -1127,12 +1127,50 @@ const deleteProduct = async (req, res) => {
         .json({ success: false, message: "Product not found" });
     }
 
-    if (Array.isArray(ProductData.image)) {
-      ProductData.image.forEach((imgPath) => {
-        const fullPath = path.join(__dirname, "..", imgPath);
-        fs.unlink(fullPath, (err) => {
-          if (err) console.error(`Failed to delete file: ${fullPath}`, err);
-        });
+    // 1. Delete thumbnailImage
+    if (ProductData.thumbnailImage) {
+      const cleanThumbPath = typeof ProductData.thumbnailImage === "string" 
+        ? ProductData.thumbnailImage.replace(/[\\\[\]"]/g, "").replace(/^[\\\/]+/, "") 
+        : "";
+      if (cleanThumbPath) {
+        const thumbPath = path.join(__dirname, "../../..", cleanThumbPath);
+        if (fs.existsSync(thumbPath)) {
+          try {
+            fs.unlinkSync(thumbPath);
+          } catch (err) {
+            console.warn(`Failed to delete thumbnail: ${thumbPath}`, err);
+          }
+        }
+      }
+    }
+
+    // 2. Delete galleryImage
+    let gallery = [];
+    if (ProductData.galleryImage) {
+      try {
+        gallery = typeof ProductData.galleryImage === "string" 
+          ? JSON.parse(ProductData.galleryImage) 
+          : ProductData.galleryImage;
+      } catch {
+        gallery = typeof ProductData.galleryImage === "string" ? ProductData.galleryImage.split(",") : [];
+      }
+    }
+
+    if (Array.isArray(gallery)) {
+      gallery.forEach((imgPath) => {
+        if (typeof imgPath === "string") {
+          const cleanImgPath = imgPath.replace(/[\\\[\]"]/g, "").replace(/^[\\\/]+/, "");
+          if (cleanImgPath) {
+            const fullPath = path.join(__dirname, "../../..", cleanImgPath);
+            if (fs.existsSync(fullPath)) {
+              try {
+                fs.unlinkSync(fullPath);
+              } catch (err) {
+                console.warn(`Failed to delete gallery image: ${fullPath}`, err);
+              }
+            }
+          }
+        }
       });
     }
 
@@ -1147,6 +1185,7 @@ const deleteProduct = async (req, res) => {
     res.status(500).json({
       success: false,
       message: "Failed to delete Product",
+      error: error.message,
     });
   }
 };
