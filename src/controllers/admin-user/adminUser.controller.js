@@ -70,8 +70,9 @@ const createAdminUser = async (req, res) => {
 
     res.cookie("refreshToken", refreshToken, {
       httpOnly: true,
-      secure: false,
-      sameSite: "Strict",
+      secure: true,
+      sameSite: "None",
+      domain: process.env.NODE_ENV === "production" ? ".rabbitnfinch.com" : undefined,
       maxAge: parseInt(process.env.COOKIE_MAX_AGE || 7 * 24 * 60 * 60 * 1000),
     });
 
@@ -138,8 +139,9 @@ const adminLogin = async (req, res) => {
 
     res.cookie("refreshToken", refreshToken, {
       httpOnly: true,
-      secure: false,
-      sameSite: "Strict",
+      secure: true,
+      sameSite: "None",
+      domain: process.env.NODE_ENV === "production" ? ".rabbitnfinch.com" : undefined,
       maxAge: parseInt(process.env.COOKIE_MAX_AGE || 7 * 24 * 60 * 60 * 1000),
     });
 

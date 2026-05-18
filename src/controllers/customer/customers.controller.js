@@ -208,8 +208,9 @@ const createCustomers = async (req, res) => {
 
     res.cookie("refreshToken", refreshToken, {
       httpOnly: true,
-      secure: false,
-      sameSite: "Strict",
+      secure: true,
+      sameSite: "None",
+      domain: process.env.NODE_ENV === "production" ? ".rabbitnfinch.com" : undefined,
       maxAge: parseInt(process.env.COOKIE_MAX_AGE || 7 * 24 * 60 * 60 * 1000),
     });
 
@@ -295,8 +296,9 @@ const customerLogin = async (req, res) => {
 
     res.cookie("refreshToken", refreshToken, {
       httpOnly: true,
-      secure: false,
-      sameSite: "Strict",
+      secure: true,
+      sameSite: "None",
+      domain: process.env.NODE_ENV === "production" ? ".rabbitnfinch.com" : undefined,
       maxAge: parseInt(process.env.COOKIE_MAX_AGE || 7 * 24 * 60 * 60 * 1000),
     });
 
@@ -709,8 +711,9 @@ const googleLogin = async (req, res) => {
 
     res.cookie("refreshToken", refreshToken, {
       httpOnly: true,
-      secure: process.env.NODE_ENV === "production",
-      sameSite: "Strict",
+      secure: true,
+      sameSite: "None",
+      domain: process.env.NODE_ENV === "production" ? ".rabbitnfinch.com" : undefined,
       maxAge: parseInt(process.env.COOKIE_MAX_AGE || 7 * 24 * 60 * 60 * 1000),
     });
 
@@ -805,8 +808,9 @@ const refreshToken = async (req, res) => {
 const logout = async (req, res) => {
   res.clearCookie("refreshToken", {
     httpOnly: true,
-    secure: process.env.NODE_ENV === "production",
-    sameSite: "Strict",
+    secure: true,
+    sameSite: "None",
+    domain: process.env.NODE_ENV === "production" ? ".rabbitnfinch.com" : undefined,
   });
   res.json({ success: true, message: "Logged out successfully" });
 };

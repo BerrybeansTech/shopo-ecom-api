@@ -21,7 +21,7 @@ const authenticateToken = async (req, res, next) => {
         return res.status(401).json({ message: "Access and refresh tokens missing" });
       }
 
-      return jwt.verify(refreshToken, process.env.REFRESH_SECRET, (err, refreshUser) => {
+      return jwt.verify(refreshToken, REFRESH_SECRET, (err, refreshUser) => {
         if (err) {
           return res.status(401).json({ message: "Refresh token invalid or expired" });
         }

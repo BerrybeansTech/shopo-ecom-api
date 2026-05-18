@@ -67,13 +67,13 @@ const getAllOrders = async (req, res) => {
               const rawGallery = Array.isArray(item.Product.galleryImage)
                 ? item.Product.galleryImage
                 : JSON.parse(item.Product.galleryImage);
-              
+
               galleryArray = (Array.isArray(rawGallery) ? rawGallery : [rawGallery])
                 .flatMap(i => typeof i === "string" ? i.split(",") : i)
                 .filter(Boolean);
             } catch (err) {
-              galleryArray = typeof item.Product.galleryImage === "string" 
-                ? item.Product.galleryImage.split(",").filter(Boolean) 
+              galleryArray = typeof item.Product.galleryImage === "string"
+                ? item.Product.galleryImage.split(",").filter(Boolean)
                 : [];
             }
           }
@@ -165,13 +165,13 @@ const getCustomerOrder = async (req, res) => {
               const rawGallery = Array.isArray(item.Product.galleryImage)
                 ? item.Product.galleryImage
                 : JSON.parse(item.Product.galleryImage);
-              
+
               galleryArray = (Array.isArray(rawGallery) ? rawGallery : [rawGallery])
                 .flatMap(i => typeof i === "string" ? i.split(",") : i)
                 .filter(Boolean);
             } catch (err) {
-              galleryArray = typeof item.Product.galleryImage === "string" 
-                ? item.Product.galleryImage.split(",").filter(Boolean) 
+              galleryArray = typeof item.Product.galleryImage === "string"
+                ? item.Product.galleryImage.split(",").filter(Boolean)
                 : [];
             }
           }
@@ -336,9 +336,9 @@ const createOrder = async (req, res) => {
       const unitPrice = parseFloat(item.unitPrice || product?.sellingPrice || 0);
       const quantity = parseInt(item.quantity || 1);
       const itemTotal = unitPrice * quantity;
-      
+
       calculatedSubTotal += itemTotal;
-      
+
       let cgst = 0, sgst = 0, igst = 0;
       const gstAmount = (itemTotal * gstPercentage) / 100;
 
@@ -351,7 +351,7 @@ const createOrder = async (req, res) => {
         igst = gstAmount;
         totalIGST += igst;
       }
-      
+
       calculatedTotalTax += gstAmount;
 
       return {
@@ -417,10 +417,10 @@ const createOrder = async (req, res) => {
 
     // Trigger Shiprocket for COD orders
     if (normalizedPaymentMethod === 'cod') {
-        console.log("🚛 Triggering Shiprocket for COD Order...");
-        await processShiprocketShipment(newOrder.id);
+      console.log("🚛 Triggering Shiprocket for COD Order...");
+      await processShiprocketShipment(newOrder.id);
     } else {
-        console.log("ℹ️ Shiprocket skipped: Payment method is not 'cod' (Current:", paymentMethod, ")");
+      console.log("ℹ️ Shiprocket skipped: Payment method is not 'cod' (Current:", paymentMethod, ")");
     }
 
     return res.status(201).json({
@@ -430,11 +430,11 @@ const createOrder = async (req, res) => {
     });
   } catch (error) {
     if (t && !t.finished) {
-        try {
-            await t.rollback();
-        } catch (rollbackError) {
-            console.error("Rollback failed:", rollbackError.message);
-        }
+      try {
+        await t.rollback();
+      } catch (rollbackError) {
+        console.error("Rollback failed:", rollbackError.message);
+      }
     }
 
     return res.status(500).json({
@@ -538,7 +538,7 @@ const trackOrder = async (req, res) => {
 
     try {
       const trackingData = await shiprocketService.trackShipment(order.shipmentId);
-      
+
       // Shiprocket tracking response structure: response.tracking_data.shipment_track[0]
       const track = trackingData?.tracking_data?.shipment_track?.[0];
       const activities = track?.shipment_track_activities || [];
