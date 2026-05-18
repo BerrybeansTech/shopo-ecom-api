@@ -1116,11 +1116,13 @@ const updateInventory = async (req, res) => {
 
 const deleteProduct = async (req, res) => {
   const { id } = req.params;
+  const transaction = await sequelize.transaction();
 
   try {
-    const ProductData = await Product.findOne({ where: { id } });
+    const ProductData = await Product.findOne({ where: { id }, transaction });
 
     if (!ProductData) {
+      await transaction.rollback();
       return res
         .status(404)
         .json({ success: false, message: "Product not found" });
@@ -1153,12 +1155,33 @@ const deleteProduct = async (req, res) => {
       }
     };
 
-    // 1. Delete thumbnail
+    // 1. Delete dependent product inventories inside the transaction
+    await ProductInventory.destroy({ where: { productId: id }, transaction });
+
+    // 2. Delete dependent reviews inside the transaction
+    await ProductReview.destroy({ where: { productId: id }, transaction });
+
+    // 3. Update OrderItems to set productId to null to preserve user purchase history
+    await OrderItems.update(
+      { productId: null },
+      { where: { productId: id }, transaction }
+    );
+
+    // 4. Delete the product from database inside the transaction
+    await Product.destroy({ where: { id }, transaction });
+
+    // Commit database changes first!
+    await transaction.commit();
+
+    // 5. AFTER successful database transaction commit, safely clean up files from disk
+    // This guarantees we never delete images if the DB delete fails!
+    
+    // Delete thumbnail
     if (ProductData.thumbnailImage) {
       deleteFile(ProductData.thumbnailImage);
     }
 
-    // 2. Delete gallery images
+    // Delete gallery images
     if (ProductData.galleryImage) {
       let galleryArr = [];
       try {
@@ -1172,62 +1195,20 @@ const deleteProduct = async (req, res) => {
       if (Array.isArray(galleryArr)) {
         galleryArr.forEach((img) => deleteFile(img));
       }
-    // 1. Delete thumbnailImage
-    if (ProductData.thumbnailImage) {
-      const cleanThumbPath = typeof ProductData.thumbnailImage === "string" 
-        ? ProductData.thumbnailImage.replace(/[\\\[\]"]/g, "").replace(/^[\\\/]+/, "") 
-        : "";
-      if (cleanThumbPath) {
-        const thumbPath = path.join(__dirname, "../../..", cleanThumbPath);
-        if (fs.existsSync(thumbPath)) {
-          try {
-            fs.unlinkSync(thumbPath);
-          } catch (err) {
-            console.warn(`Failed to delete thumbnail: ${thumbPath}`, err);
-          }
-        }
-      }
     }
 
-    // 2. Delete galleryImage
-    let gallery = [];
-    if (ProductData.galleryImage) {
-      try {
-        gallery = typeof ProductData.galleryImage === "string" 
-          ? JSON.parse(ProductData.galleryImage) 
-          : ProductData.galleryImage;
-      } catch {
-        gallery = typeof ProductData.galleryImage === "string" ? ProductData.galleryImage.split(",") : [];
-      }
-    }
-
-    if (Array.isArray(gallery)) {
-      gallery.forEach((imgPath) => {
-        if (typeof imgPath === "string") {
-          const cleanImgPath = imgPath.replace(/[\\\[\]"]/g, "").replace(/^[\\\/]+/, "");
-          if (cleanImgPath) {
-            const fullPath = path.join(__dirname, "../../..", cleanImgPath);
-            if (fs.existsSync(fullPath)) {
-              try {
-                fs.unlinkSync(fullPath);
-              } catch (err) {
-                console.warn(`Failed to delete gallery image: ${fullPath}`, err);
-              }
-            }
-          }
-        }
-      });
-    }
-
-    await Product.destroy({ where: { id } });
-
-    res.json({
+    return res.json({
       success: true,
-      message: "Product deleted successfully",
+      message: "Product and its dependencies deleted successfully",
     });
   } catch (error) {
     console.error("Error deleting Product:", error);
-    res.status(500).json({
+    try {
+      await transaction.rollback();
+    } catch (rollbackError) {
+      console.error("Failed to rollback transaction:", rollbackError);
+    }
+    return res.status(500).json({
       success: false,
       message: "Failed to delete Product",
       error: error.message,
