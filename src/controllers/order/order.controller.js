@@ -589,6 +589,98 @@ const trackOrder = async (req, res) => {
   }
 };
 
+const createShiprocketShipment = async (req, res) => {
+  try {
+    const { id } = req.params;
+    const order = await Orders.findByPk(id);
+
+    if (!order) {
+      return res.status(404).json({
+        success: false,
+        message: "Order not found",
+      });
+    }
+
+    if (order.shiprocketOrderId) {
+      return res.status(400).json({
+        success: false,
+        message: `Shipment already created with Shiprocket Order ID: ${order.shiprocketOrderId}`,
+      });
+    }
+
+    const response = await processShiprocketShipment(order.id);
+
+    if (response && response.order_id) {
+      return res.status(200).json({
+        success: true,
+        message: "Shiprocket shipment created successfully",
+        data: response,
+      });
+    } else {
+      const updatedOrder = await Orders.findByPk(id);
+      const errorMsg = updatedOrder.shiprocketResponse?.error || updatedOrder.shiprocketResponse?.originalMessage || "Failed to create shipment on Shiprocket";
+      return res.status(500).json({
+        success: false,
+        message: "Failed to create Shiprocket shipment",
+        error: errorMsg,
+      });
+    }
+  } catch (error) {
+    console.error("Error creating Shiprocket shipment:", error);
+    return res.status(500).json({
+      success: false,
+      message: "Internal server error during shipment creation",
+      error: error.message,
+    });
+  }
+};
+
+const cancelShiprocketShipment = async (req, res) => {
+  try {
+    const { id } = req.params;
+    const order = await Orders.findByPk(id);
+
+    if (!order) {
+      return res.status(404).json({
+        success: false,
+        message: "Order not found",
+      });
+    }
+
+    if (!order.shipmentId) {
+      return res.status(400).json({
+        success: false,
+        message: "No active shipment found for this order to cancel",
+      });
+    }
+
+    console.log("🚛 Cancelling Shiprocket shipment for Shipment ID:", order.shipmentId);
+    const response = await shiprocketService.cancelShipment([order.shipmentId]);
+
+    await order.update({
+      shipmentStatus: 'cancelled',
+      status: 'cancelled',
+      shiprocketResponse: {
+        ...order.shiprocketResponse,
+        cancellationResponse: response,
+        cancelledAt: new Date()
+      }
+    });
+
+    return res.status(200).json({
+      success: true,
+      message: "Shiprocket shipment cancelled successfully",
+      data: response,
+    });
+  } catch (error) {
+    console.error("Error cancelling Shiprocket shipment:", error);
+    return res.status(500).json({
+      success: false,
+      message: "Failed to cancel Shiprocket shipment",
+      error: error.message,
+    });
+  }
+};
 
 module.exports = {
   getAllOrders,
@@ -598,5 +690,7 @@ module.exports = {
   updateOrder,
   deleteOrder,
   trackOrder,
+  createShiprocketShipment,
+  cancelShiprocketShipment,
 };
 

@@ -11,6 +11,8 @@ router.get('/get-customer-order/:id', authenticateToken, orderController.getCust
 router.post('/create-order', authenticateToken, orderController.createOrder);
 router.put('/update-order', authenticateToken, orderController.updateOrder);
 router.get('/track-order/:id', authenticateToken, orderController.trackOrder);
+router.post('/create-shipment/:id', authenticateToken, orderController.createShiprocketShipment);
+router.post('/cancel-shipment/:id', authenticateToken, orderController.cancelShiprocketShipment);
 
 
 // Invoice routes
