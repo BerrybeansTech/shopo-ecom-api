@@ -115,12 +115,12 @@ ProductFitType.hasMany(Product, {
 Product.belongsTo(ProductOccasion, {
   foreignKey: "occasionId",
   as: "occasion",
-  onDelete: "CASCADE",
-  onUpdate: "CASCADE",
+  constraints: false,
 });
 ProductOccasion.hasMany(Product, {
   foreignKey: "occasionId",
   as: "products",
+  constraints: false,
 });
 
 // ProductInventory → Product
