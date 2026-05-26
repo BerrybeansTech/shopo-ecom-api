@@ -422,8 +422,31 @@ const getAllProduct = async (req, res) => {
 
     const products = await Product.findAll(queryOptions);
 
+    // Fetch all occasions to resolve comma-separated list of occasion IDs
+    const allOccasions = await ProductOccasion.findAll({ attributes: ["id", "name"] });
+    const occasionMap = allOccasions.reduce((acc, occ) => {
+      if (occ && occ.id) acc[occ.id.toString()] = occ.name;
+      return acc;
+    }, {});
+
     const updatedProducts = products.map((product) => {
       const data = product.toJSON();
+
+      // Resolve comma-separated occasionIds
+      if (data.occasionId) {
+        const ids = data.occasionId.toString().split(',').map(id => id.trim()).filter(Boolean);
+        const names = ids.map(id => occasionMap[id]).filter(Boolean);
+        if (names.length > 0) {
+          data.occasion = {
+            id: ids.join(','),
+            name: names.join(', ')
+          };
+        } else {
+          data.occasion = null;
+        }
+      } else {
+        data.occasion = null;
+      }
 
       data.thumbnailImage = data.thumbnailImage
         ? `${baseUrl}${data.thumbnailImage.replace(/[\\\[\]"]/g, "").replace(/^[\\\/]+/, "")}`
@@ -710,6 +733,29 @@ const getProductById = async (req, res) => {
 
     const data = product.toJSON();
 
+    // Fetch all occasions to resolve comma-separated list of occasion IDs
+    const allOccasions = await ProductOccasion.findAll({ attributes: ["id", "name"] });
+    const occasionMap = allOccasions.reduce((acc, occ) => {
+      if (occ && occ.id) acc[occ.id.toString()] = occ.name;
+      return acc;
+    }, {});
+
+    // Resolve comma-separated occasionIds
+    if (data.occasionId) {
+      const ids = data.occasionId.toString().split(',').map(id => id.trim()).filter(Boolean);
+      const names = ids.map(id => occasionMap[id]).filter(Boolean);
+      if (names.length > 0) {
+        data.occasion = {
+          id: ids.join(','),
+          name: names.join(', ')
+        };
+      } else {
+        data.occasion = null;
+      }
+    } else {
+      data.occasion = null;
+    }
+
     if (Array.isArray(data.inventories)) {
       data.inventories = data.inventories.map((inv) => {
         if (inv && inv.productSize && inv.productSize.size) {
@@ -801,13 +847,16 @@ const createProduct = async (req, res) => {
     } = req.body;
 
     // Handle file uploads
+    const targetPrefix = (process.env.FILE_PATH || "/uploads/").replace(/[\\\[\]"]/g, "");
+    const cleanPrefix = targetPrefix.replace(/^\/+|\/+$/g, '');
+
     const thumbnailImage = req.files?.thumbnailImage?.[0]
-      ? `${(process.env.FILE_PATH || "").replace(/[\\\[\]"]/g, "")}${req.files.thumbnailImage[0].filename.replace(/[\\\[\]"]/g, "")}`
+      ? `/${cleanPrefix}/${req.files.thumbnailImage[0].filename.replace(/[\\\[\]"]/g, "")}`
       : null;
 
     const galleryImage = req.files?.galleryImage
       ? req.files.galleryImage.map(
-        (file) => `${(process.env.FILE_PATH || "").replace(/[\\\[\]"]/g, "")}${file.filename.replace(/[\\\[\]"]/g, "")}`
+        (file) => `/${cleanPrefix}/${file.filename.replace(/[\\\[\]"]/g, "")}`
       )
       : [];
 
@@ -968,12 +1017,6 @@ const updateProduct = async (req, res) => {
       .flatMap(item => typeof item === 'string' ? item.split(',') : item)
       .filter(Boolean);
 
-    // ✅ Normalize paths
-    oldGalleryImage = oldGalleryImage.map((img) => {
-      const index = img.indexOf("uploads/");
-      return index !== -1 ? img.slice(index) : img;
-    });
-
     // ✅ Find product
     const existing = await Product.findByPk(id);
     if (!existing) {
@@ -998,17 +1041,24 @@ const updateProduct = async (req, res) => {
       existingGallery = [];
     }
 
-    // ✅ Start with old images
-    let galleryImage = [...oldGalleryImage];
+    // ✅ Helper to extract filename only (for robust comparison)
+    const getFilename = (p) => {
+      if (typeof p !== 'string') return '';
+      return p.split('/').pop().split('\\').pop();
+    };
 
-    // ✅ Find removed images
+    const oldGalleryFilenames = oldGalleryImage.map(img => getFilename(img)).filter(Boolean);
+
+    // ✅ Find removed images (compare by filename only to ignore prefix/slash mismatches)
     const removedImages = existingGallery.filter(
-      (img) => !oldGalleryImage.includes(img)
+      (img) => !oldGalleryFilenames.includes(getFilename(img))
     );
 
-    // ✅ Delete removed images
+    // ✅ Delete removed images from disk
     for (const img of removedImages) {
-      const filePath = path.join(__dirname, "..", img);
+      // Normalize path (ensure leading slash is ignored for path.join)
+      const cleanImgPath = img.startsWith('/') ? img.slice(1) : img;
+      const filePath = path.join(__dirname, "..", cleanImgPath);
       if (fs.existsSync(filePath)) {
         try {
           fs.unlinkSync(filePath);
@@ -1018,10 +1068,38 @@ const updateProduct = async (req, res) => {
       }
     }
 
+    // ✅ Reconstruct galleryImage preserving the original full paths/prefixes for kept images
+    let galleryImage = [];
+    for (const img of oldGalleryImage) {
+      const filename = getFilename(img);
+      const matchedExisting = existingGallery.find(ex => getFilename(ex) === filename);
+      if (matchedExisting) {
+        galleryImage.push(matchedExisting);
+      } else {
+        galleryImage.push(img);
+      }
+    }
+
+    // Ensure each image path in galleryImage has the correct target prefix before saving to DB
+    const targetPrefix = (process.env.FILE_PATH || "/uploads/").replace(/[\\\[\]"]/g, "");
+    galleryImage = galleryImage.map(img => {
+      if (typeof img !== 'string') return img;
+      const filename = getFilename(img);
+      const cleanPrefix = targetPrefix.replace(/^\/+|\/+$/g, ''); // e.g. "uploads"
+      if (img.includes(cleanPrefix)) {
+        const idx = img.indexOf(cleanPrefix);
+        return '/' + img.slice(idx).replace(/^\/+/, '');
+      }
+      return '/' + cleanPrefix + '/' + filename;
+    });
+
     // ✅ Add new gallery images
     if (req.files?.galleryImage?.length > 0) {
       const newImages = req.files.galleryImage.map(
-        (file) => `${(process.env.FILE_PATH || "").replace(/[\\\[\]"]/g, "")}${file.filename.replace(/[\\\[\]"]/g, "")}`
+        (file) => {
+          const cleanPrefix = targetPrefix.replace(/^\/+|\/+$/g, '');
+          return '/' + cleanPrefix + '/' + file.filename.replace(/[\\\[\]"]/g, "");
+        }
       );
       galleryImage = [...galleryImage, ...newImages];
     }
@@ -1032,7 +1110,8 @@ const updateProduct = async (req, res) => {
     if (req.files?.thumbnailImage?.[0]) {
       // delete old thumbnail
       if (thumbnailImage) {
-        const oldThumbPath = path.join(__dirname, "..", thumbnailImage);
+        const cleanThumbPath = thumbnailImage.startsWith('/') ? thumbnailImage.slice(1) : thumbnailImage;
+        const oldThumbPath = path.join(__dirname, "..", cleanThumbPath);
         if (fs.existsSync(oldThumbPath)) {
           try {
             fs.unlinkSync(oldThumbPath);
@@ -1042,7 +1121,8 @@ const updateProduct = async (req, res) => {
         }
       }
 
-      thumbnailImage = `${(process.env.FILE_PATH || "").replace(/[\\\[\]"]/g, "")}${req.files.thumbnailImage[0].filename.replace(/[\\\[\]"]/g, "")}`;
+      const cleanPrefix = targetPrefix.replace(/^\/+|\/+$/g, '');
+      thumbnailImage = '/' + cleanPrefix + '/' + req.files.thumbnailImage[0].filename.replace(/[\\\[\]"]/g, "");
     }
 
     let parsedApparelDetails = {};
@@ -1068,7 +1148,7 @@ const updateProduct = async (req, res) => {
         childCategoryId,
         productMaterialId: parsedApparelDetails.productMaterialId ? parseInt(parsedApparelDetails.productMaterialId, 10) : null,
         fitTypeId: parsedApparelDetails.fitType ? parseInt(parsedApparelDetails.fitType, 10) : null,
-        occasionId: parsedApparelDetails.occasionId ? parseInt(parsedApparelDetails.occasionId, 10) : null,
+        occasionId: parsedApparelDetails.occasionId ? parsedApparelDetails.occasionId.toString() : null,
         seasonal: parsedApparelDetails.seasonal || null,
         mrp,
         sellingPrice,
@@ -1104,22 +1184,36 @@ const updateProduct = async (req, res) => {
 };
 
 const updateInventory = async (req, res) => {
-  let {
-    id,
-    productColorVariationId,
-    productSizeVariationId,
-    availableQuantity,
-  } = req.body;
+  const items = Array.isArray(req.body) ? req.body : [req.body];
 
   try {
-    await ProductInventory.update(
-      {
+    for (const item of items) {
+      const {
+        id,
+        productId,
         productColorVariationId,
         productSizeVariationId,
         availableQuantity,
-      },
-      { where: { id } }
-    );
+      } = item;
+
+      if (id) {
+        await ProductInventory.update(
+          {
+            productColorVariationId: parseInt(productColorVariationId),
+            productSizeVariationId: parseInt(productSizeVariationId),
+            availableQuantity: parseInt(availableQuantity),
+          },
+          { where: { id } }
+        );
+      } else if (productId) {
+        await ProductInventory.create({
+          productId: parseInt(productId),
+          productColorVariationId: parseInt(productColorVariationId),
+          productSizeVariationId: parseInt(productSizeVariationId),
+          availableQuantity: parseInt(availableQuantity),
+        });
+      }
+    }
 
     res.json({ success: true, message: "Inventory updated successfully" });
   } catch (error) {

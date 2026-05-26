@@ -57,6 +57,10 @@ const Product = sequelize.define('Product', {
     type: DataTypes.TEXT,
     allowNull: true
   },
+  occasionId: {
+    type: DataTypes.STRING(255),
+    allowNull: true
+  },
   status: {
     type: DataTypes.ENUM("active", "inactive", "deleted"),
     defaultValue: "active"
