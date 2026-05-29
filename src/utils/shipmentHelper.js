@@ -1,16 +1,32 @@
 const shiprocketService = require('../services/shiprocket.service');
 const Orders = require('../models/orders/order.model');
 
-const processShiprocketShipment = async (orderId) => {
+const processShiprocketShipment = async (orderId, transaction = null) => {
     console.log("🚀 [Shiprocket] Starting shipment process for Order ID:", orderId);
     try {
         const order = await Orders.findByPk(orderId, {
-            include: ['Customer', 'OrderItems']
+            include: ['Customer', 'OrderItems'],
+            transaction
         });
 
         if (!order) {
             console.error("❌ [Shiprocket] Order not found in DB:", orderId);
             return;
+        }
+
+        const Address = require('../models/customer/customerAddress.model');
+        let customerPhone = order.Customer?.phone;
+        if (!customerPhone) {
+            const address = await Address.findOne({
+                where: { customerId: order.customerId },
+                order: [['isDefault', 'DESC'], ['updatedAt', 'DESC']],
+                transaction
+            });
+            customerPhone = address?.phone;
+        }
+
+        if (!customerPhone) {
+            throw new Error("Customer phone number is missing. Cannot create Shiprocket shipment.");
         }
 
         console.log("📦 [Shiprocket] Mapping payload for Order #", order.id);
@@ -19,15 +35,15 @@ const processShiprocketShipment = async (orderId) => {
             order_id: order.id,
             order_date: order.createdAt,
             pickup_location: process.env.SHIPROCKET_PICKUP_LOCATION || "Primary",
-            billing_customer_name: order.Customer.name,
+            billing_customer_name: order.Customer?.name || "Customer",
             billing_last_name: "",
             billing_address: order.shippingAddress,
-            billing_city: order.Customer.city || "Tiruvannamalai", 
-            billing_pincode: order.Customer.postalCode || "604408",
-            billing_state: order.Customer.state || "Tamil Nadu",
-            billing_country: order.Customer.country || "India",
-            billing_email: order.Customer.email,
-            billing_phone: order.Customer.phone,
+            billing_city: order.Customer?.city || "Tiruvannamalai", 
+            billing_pincode: order.Customer?.postalCode || "604408",
+            billing_state: order.Customer?.state || "Tamil Nadu",
+            billing_country: order.Customer?.country || "India",
+            billing_email: order.Customer?.email || "customer@example.com",
+            billing_phone: customerPhone,
             shipping_is_billing: true,
             order_items: order.OrderItems.map(item => ({
                 name: item.productName,
@@ -68,25 +84,30 @@ const processShiprocketShipment = async (orderId) => {
                 awbCode: awbCode || order.awbCode,
                 courierName: courierName || order.courierName,
                 shipmentStatus: 'pending',
+                status: 'confirmed',
                 shiprocketResponse: response
-            });
-            return response;
+            }, { transaction });
+            return { success: true, data: response };
+        } else {
+            throw new Error(response?.message || "Failed to create shipment on Shiprocket");
         }
     } catch (error) {
         const errorDetail = error.response?.data || error.message;
         console.error('❌ FULL SHIPROCKET ERROR:', JSON.stringify(errorDetail, null, 2));
         
-        // Save the detailed error to the order
-        const order = await Orders.findByPk(orderId);
+        // Save the detailed error to the order and set shipmentStatus to 'failed'
+        const order = await Orders.findByPk(orderId, { transaction });
         if (order) {
             await order.update({
+                shipmentStatus: 'failed',
                 shiprocketResponse: { 
                     error: errorDetail, 
                     timestamp: new Date(),
                     originalMessage: error.message 
                 }
-            });
+            }, { transaction });
         }
+        return { success: false, error: errorDetail };
     }
 };
 

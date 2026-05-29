@@ -65,8 +65,8 @@ const Orders = sequelize.define('Orders', {
     defaultValue: 'pending',
   },
   shipmentStatus: {
-    type: DataTypes.ENUM('pending', 'pickup_scheduled', 'shipped', 'in_transit', 'delivered', 'returned', 'cancelled'),
-    defaultValue: 'pending',
+    type: DataTypes.ENUM('not_created', 'pending', 'pickup_scheduled', 'shipped', 'in_transit', 'delivered', 'returned', 'cancelled', 'failed'),
+    defaultValue: 'not_created',
   },
   razorpayOrderId: {
     type: DataTypes.STRING,
@@ -117,7 +117,7 @@ const Orders = sequelize.define('Orders', {
     allowNull: true,
   },
   status: {
-    type: DataTypes.ENUM('pending', 'shipped', 'delivered', 'cancelled', 'returned', 'complete'),
+    type: DataTypes.ENUM('pending', 'confirmed', 'shipped', 'delivered', 'cancelled', 'returned', 'complete'),
     defaultValue: 'pending',
   }
 }, {

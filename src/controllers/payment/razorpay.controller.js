@@ -12,17 +12,26 @@ const razorpay = new Razorpay({
 });
 
 const createOrder = async (req, res) => {
-    const { amount, currency, receipt } = req.body;
+    const { amount, currency, receipt, orderId } = req.body;
 
     const options = {
-        amount: amount * 100,
+        amount: Math.round(amount), // Amount is already in paise from frontend
         currency,
-        receipt,
+        receipt: receipt || orderId,
         payment_capture: 1,
     };
 
     try {
         const order = await razorpay.orders.create(options);
+        
+        // Link Razorpay Order ID to the internal Order
+        if (orderId) {
+            await Orders.update(
+                { razorpayOrderId: order.id },
+                { where: { id: orderId } }
+            );
+        }
+
         res.json({ 
             success: true, 
             data: {
@@ -39,7 +48,7 @@ const createOrder = async (req, res) => {
 }
 
 const verifyPayment = async (req, res) => {
-    const { razorpay_order_id, razorpay_payment_id, razorpay_signature } = req.body;
+    const { razorpay_order_id, razorpay_payment_id, razorpay_signature, orderId } = req.body;
 
     if (!razorpay_order_id || !razorpay_payment_id || !razorpay_signature) {
         return res.status(400).json({ success: false, message: 'Missing payment details' });
@@ -52,25 +61,31 @@ const verifyPayment = async (req, res) => {
             .digest('hex');
 
         if (hash === razorpay_signature) {
+            const whereClause = orderId ? { id: orderId } : { razorpayOrderId: razorpay_order_id };
+
             // Update order status in database
             const [updatedRows] = await Orders.update(
                 { 
                     paymentStatus: 'paid', 
-                    status: 'pending', // or 'processing' if you have that enum
+                    status: 'pending',
                     razorpayPaymentId: razorpay_payment_id,
-                    razorpaySignature: razorpay_signature
+                    razorpaySignature: razorpay_signature,
+                    razorpayOrderId: razorpay_order_id
                 },
-                { where: { razorpayOrderId: razorpay_order_id } }
+                { where: whereClause }
             );
 
-            if (updatedRows === 0) {
-                console.warn(`Payment verified for ${razorpay_order_id} but no matching order found in database.`);
-            } else {
-                // Find the order to get its ID and trigger shipment
-                const order = await Orders.findOne({ where: { razorpayOrderId: razorpay_order_id } });
-                if (order) {
-                    processShiprocketShipment(order.id);
+            // Fetch the order to get the database record and trigger Shiprocket
+            const dbOrder = await Orders.findOne({ where: whereClause });
+            if (dbOrder) {
+                console.log(`🚛 Payment verified. Triggering Shiprocket gracefully for order: ${dbOrder.id}`);
+                try {
+                    await processShiprocketShipment(dbOrder.id);
+                } catch (shiprocketError) {
+                    console.error("❌ Graceful Shiprocket trigger error after payment verification:", shiprocketError);
                 }
+            } else {
+                console.warn(`Payment verified for ${razorpay_order_id} but no matching order found in database.`);
             }
 
             res.json({ success: true, message: 'Payment verified and order updated successfully' });

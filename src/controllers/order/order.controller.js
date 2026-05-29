@@ -378,6 +378,8 @@ const createOrder = async (req, res) => {
       });
     }
 
+    const isPaid = !!req.body.razorpayPaymentId;
+
     const newOrder = await Orders.create(
       {
         customerId,
@@ -394,7 +396,9 @@ const createOrder = async (req, res) => {
         paymentMethod,
         orderNote,
         razorpayOrderId: req.body.razorpayOrderId || null,
-        paymentStatus: "pending",
+        razorpayPaymentId: req.body.razorpayPaymentId || null,
+        razorpaySignature: req.body.razorpaySignature || null,
+        paymentStatus: isPaid ? "paid" : "pending",
         status: "pending",
       },
       { transaction: t }
@@ -412,21 +416,33 @@ const createOrder = async (req, res) => {
     await t.commit();
     console.log("💳 Payment Method Received:", paymentMethod);
 
+    // Trigger Shiprocket for COD orders AFTER transaction is committed!
     const normalizedPaymentMethod = paymentMethod?.trim().toLowerCase();
-    console.log("💳 Normalized Payment Method:", normalizedPaymentMethod);
-
-    // Trigger Shiprocket for COD orders
     if (normalizedPaymentMethod === 'cod') {
       console.log("🚛 Triggering Shiprocket for COD Order...");
-      await processShiprocketShipment(newOrder.id);
+      try {
+        await processShiprocketShipment(newOrder.id);
+      } catch (shiprocketError) {
+        console.error("❌ Graceful Shiprocket trigger error for COD order:", shiprocketError);
+      }
     } else {
-      console.log("ℹ️ Shiprocket skipped: Payment method is not 'cod' (Current:", paymentMethod, ")");
+      console.log("ℹ️ Shiprocket skipped: Payment method is not 'cod' (Current Method:", paymentMethod, "Status:", newOrder.paymentStatus, ")");
     }
+
+    // Reload order to capture any shipment updates
+    const finalOrder = await Orders.findByPk(newOrder.id, {
+      include: [
+        {
+          model: OrderItems,
+          as: "OrderItems",
+        }
+      ]
+    });
 
     return res.status(201).json({
       success: true,
       message: "Order created successfully",
-      data: newOrder,
+      data: finalOrder || newOrder,
     });
   } catch (error) {
     if (t && !t.finished) {
@@ -437,10 +453,13 @@ const createOrder = async (req, res) => {
       }
     }
 
-    return res.status(500).json({
+    const errorDetail = error.response?.data || error.message;
+
+    return res.status(400).json({
       success: false,
-      message: "Failed to create order",
-      error: error.message,
+      source: "internal",
+      message: error.message || "Failed to create order",
+      details: errorDetail
     });
   }
 };

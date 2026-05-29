@@ -1286,7 +1286,7 @@ const deleteProduct = async (req, res) => {
 
     // 5. AFTER successful database transaction commit, safely clean up files from disk
     // This guarantees we never delete images if the DB delete fails!
-    
+
     // Delete thumbnail
     if (ProductData.thumbnailImage) {
       deleteFile(ProductData.thumbnailImage);
@@ -1327,6 +1327,319 @@ const deleteProduct = async (req, res) => {
   }
 };
 
+// ─── HOMEPAGE ENDPOINT HELPERS ────────────────────────────────────────────────
+
+const getCommonProductIncludes = () => [
+  {
+    model: ProductReview,
+    as: "productReviews",
+    attributes: [],
+    required: false,
+  },
+  {
+    model: ProductCategory,
+    as: "category",
+    attributes: ["id", "name"],
+  },
+  {
+    model: ProductSubCategory,
+    as: "subCategory",
+    attributes: ["id", "name"],
+  },
+  {
+    model: ProductChildCategory,
+    as: "childCategory",
+    attributes: ["id", "name"],
+  },
+  {
+    model: ProductOccasion,
+    as: "occasion",
+    attributes: ["id", "name"],
+  },
+  {
+    model: ProductInventory,
+    as: "inventories",
+    include: [
+      {
+        model: ProductColorVariation,
+        as: "productColor",
+        attributes: ["id", "color"],
+      },
+      {
+        model: ProductSizeVariation,
+        as: "productSize",
+        attributes: ["id", "size"],
+      },
+    ],
+    attributes: ["id", "availableQuantity"],
+    required: false,
+  },
+];
+
+const getCommonProductAttributes = () => ({
+  exclude: ["updatedAt", "galleryImage", "additionalInformation"],
+  include: [
+    [
+      literal(`(
+        SELECT IFNULL(AVG(rating), 0)
+        FROM productReview AS pr
+        WHERE pr.productId = Product.id
+      )`),
+      "averageRating",
+    ],
+    [
+      literal(`(
+        SELECT COUNT(*)
+        FROM productReview AS pr
+        WHERE pr.productId = Product.id
+      )`),
+      "reviewCount",
+    ],
+  ],
+});
+
+const formatProductList = (products, baseUrl, occasionMap) => {
+  return products.map((product) => {
+    const data = product.toJSON();
+
+    // Resolve comma-separated occasionIds
+    if (data.occasionId) {
+      const ids = data.occasionId.toString().split(",").map((id) => id.trim()).filter(Boolean);
+      const names = ids.map((id) => occasionMap[id]).filter(Boolean);
+      if (names.length > 0) {
+        data.occasion = { id: ids.join(","), name: names.join(", ") };
+      } else {
+        data.occasion = null;
+      }
+    } else {
+      data.occasion = null;
+    }
+
+    // Thumbnail image
+    data.thumbnailImage = data.thumbnailImage
+      ? `${baseUrl}${data.thumbnailImage.replace(/[\\[\]"]/g, "").replace(/^[\\/]+/, "")}`
+      : null;
+
+    // Gallery images
+    let galleryArray = [];
+    if (data.galleryImage) {
+      try {
+        const rawGallery = Array.isArray(data.galleryImage)
+          ? data.galleryImage
+          : JSON.parse(data.galleryImage);
+        galleryArray = (Array.isArray(rawGallery) ? rawGallery : [rawGallery])
+          .flatMap((item) => (typeof item === "string" ? item.split(",") : item))
+          .filter(Boolean);
+      } catch (err) {
+        galleryArray =
+          typeof data.galleryImage === "string"
+            ? data.galleryImage.split(",").filter(Boolean)
+            : [];
+      }
+    }
+    if (!Array.isArray(galleryArray)) {
+      galleryArray = galleryArray ? [galleryArray] : [];
+    }
+    data.galleryImage = galleryArray
+      .filter((img) => typeof img === "string")
+      .map((img) => `${baseUrl}${img.replace(/[\\[\]"]/g, "").replace(/^[\\/]+/, "")}`);
+
+    data.averageRating = parseFloat(data.averageRating || 0).toFixed(1);
+    data.reviewCount = parseInt(data.reviewCount || 0);
+
+    // Parse size arrays
+    try {
+      if (Array.isArray(data.inventories) && data.inventories.length > 0) {
+        data.inventories = data.inventories.map((inv) => {
+          if (inv && inv.productSize && inv.productSize.size) {
+            let sizes = inv.productSize.size;
+            if (typeof sizes === "string") {
+              try {
+                sizes = JSON.parse(sizes);
+              } catch (e) {
+                sizes = [sizes];
+              }
+            }
+            inv.productSize.size = Array.isArray(sizes) ? sizes : [sizes];
+          }
+          return inv;
+        });
+      }
+    } catch (err) {
+      console.warn("Failed to parse product sizes in response:", err);
+    }
+
+    return data;
+  });
+};
+
+// ─── TOP SELLING PRODUCTS ─────────────────────────────────────────────────────
+
+const getTopSelling = async (req, res) => {
+  try {
+    const limit = parseInt(req.query.limit) || 12;
+    const host = req.get("host");
+    const protocol = host.includes("localhost") ? req.protocol : "https";
+    const baseUrl = `${protocol}://${host}/`;
+
+    // 1. Get product IDs ordered by total quantity sold
+    const topItems = await OrderItems.findAll({
+      attributes: [
+        "productId",
+        [fn("SUM", col("quantity")), "totalSold"],
+      ],
+      where: {
+        productId: { [Op.ne]: null },
+        isActive: true,
+      },
+      group: ["productId"],
+      order: [[literal("totalSold"), "DESC"]],
+      limit: limit,
+    });
+
+    let productIds = topItems.map((item) => item.productId).filter(Boolean);
+    let products = [];
+
+    if (productIds.length > 0) {
+      products = await Product.findAll({
+        where: { id: { [Op.in]: productIds }, status: "active" },
+        attributes: getCommonProductAttributes(),
+        include: getCommonProductIncludes(),
+      });
+      // Keep order-count hierarchy
+      products.sort((a, b) => productIds.indexOf(a.id) - productIds.indexOf(b.id));
+    }
+
+    // 2. Fallback: fill with random active products if not enough orders
+    if (products.length < limit) {
+      const remainingLimit = limit - products.length;
+      const excludeIds = products.map((p) => p.id);
+
+      const fillProducts = await Product.findAll({
+        where: {
+          status: "active",
+          ...(excludeIds.length > 0 && { id: { [Op.notIn]: excludeIds } }),
+        },
+        attributes: getCommonProductAttributes(),
+        include: getCommonProductIncludes(),
+        order: sequelize.random(),
+        limit: remainingLimit,
+      });
+
+      products = [...products, ...fillProducts];
+    }
+
+    const allOccasions = await ProductOccasion.findAll({ attributes: ["id", "name"] });
+    const occasionMap = allOccasions.reduce((acc, occ) => {
+      if (occ && occ.id) acc[occ.id.toString()] = occ.name;
+      return acc;
+    }, {});
+
+    const formattedProducts = formatProductList(products, baseUrl, occasionMap);
+
+    res.json({ success: true, data: formattedProducts });
+  } catch (error) {
+    console.error("Error fetching top selling products:", error);
+    res.status(500).json({
+      success: false,
+      message: "Failed to retrieve top selling products",
+      error: error.message,
+    });
+  }
+};
+
+// ─── NEW ARRIVALS ─────────────────────────────────────────────────────────────
+
+const getNewArrivals = async (req, res) => {
+  try {
+    const limit = parseInt(req.query.limit) || 12;
+    const host = req.get("host");
+    const protocol = host.includes("localhost") ? req.protocol : "https";
+    const baseUrl = `${protocol}://${host}/`;
+
+    const products = await Product.findAll({
+      where: { status: "active" },
+      attributes: getCommonProductAttributes(),
+      include: getCommonProductIncludes(),
+      order: [["createdAt", "DESC"]],
+      limit: limit,
+    });
+
+    const allOccasions = await ProductOccasion.findAll({ attributes: ["id", "name"] });
+    const occasionMap = allOccasions.reduce((acc, occ) => {
+      if (occ && occ.id) acc[occ.id.toString()] = occ.name;
+      return acc;
+    }, {});
+
+    const formattedProducts = formatProductList(products, baseUrl, occasionMap);
+
+    res.json({ success: true, data: formattedProducts });
+  } catch (error) {
+    console.error("Error fetching new arrivals:", error);
+    res.status(500).json({
+      success: false,
+      message: "Failed to retrieve new arrivals",
+      error: error.message,
+    });
+  }
+};
+
+// ─── ACCESSORIES ──────────────────────────────────────────────────────────────
+
+const getAccessories = async (req, res) => {
+  try {
+    const limit = parseInt(req.query.limit) || 12;
+    const host = req.get("host");
+    const protocol = host.includes("localhost") ? req.protocol : "https";
+    const baseUrl = `${protocol}://${host}/`;
+
+    // Find the "Accessories" category
+    const accessoryCategory = await ProductCategory.findOne({
+      where: { name: { [Op.like]: "%accessor%"} },
+    });
+
+    let products = [];
+
+    if (accessoryCategory) {
+      products = await Product.findAll({
+        where: { status: "active", categoryId: accessoryCategory.id },
+        attributes: getCommonProductAttributes(),
+        include: getCommonProductIncludes(),
+        order: [["createdAt", "DESC"]],
+        limit: limit,
+      });
+    }
+
+    // Fallback: if no accessories category or no products, return random
+    if (products.length === 0) {
+      products = await Product.findAll({
+        where: { status: "active" },
+        attributes: getCommonProductAttributes(),
+        include: getCommonProductIncludes(),
+        order: sequelize.random(),
+        limit: limit,
+      });
+    }
+
+    const allOccasions = await ProductOccasion.findAll({ attributes: ["id", "name"] });
+    const occasionMap = allOccasions.reduce((acc, occ) => {
+      if (occ && occ.id) acc[occ.id.toString()] = occ.name;
+      return acc;
+    }, {});
+
+    const formattedProducts = formatProductList(products, baseUrl, occasionMap);
+
+    res.json({ success: true, data: formattedProducts });
+  } catch (error) {
+    console.error("Error fetching accessories:", error);
+    res.status(500).json({
+      success: false,
+      message: "Failed to retrieve accessories",
+      error: error.message,
+    });
+  }
+};
+
 module.exports = {
   getAllProduct,
   getProductById,
@@ -1337,4 +1650,7 @@ module.exports = {
   getProductSubCatagory,
   getAllCategoriesWithSubcategories,
   updateInventory,
+  getTopSelling,
+  getNewArrivals,
+  getAccessories,
 };
