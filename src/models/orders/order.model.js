@@ -116,6 +116,20 @@ const Orders = sequelize.define('Orders', {
     type: DataTypes.TEXT,
     allowNull: true,
   },
+  couponCode: {
+    type: DataTypes.STRING(100),
+    allowNull: true,
+  },
+  couponDiscount: {
+    type: DataTypes.INTEGER,
+    allowNull: true,
+    defaultValue: 0,
+  },
+  nector_synced: {
+    type: DataTypes.BOOLEAN,
+    defaultValue: false,
+    allowNull: false,
+  },
   status: {
     type: DataTypes.ENUM('pending', 'confirmed', 'shipped', 'delivered', 'cancelled', 'returned', 'complete'),
     defaultValue: 'pending',

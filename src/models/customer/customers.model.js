@@ -90,33 +90,28 @@ const Customers = sequelize.define('Customers', {
     defaultValue: 'active',
   },
 
-  // loyaltyPoints: {
-  //   type: DataTypes.INTEGER,
-  //   defaultValue: 0,
-  //   allowNull: true,
-  // },
+  customer_uuid: {
+    type: DataTypes.STRING(100),
+    allowNull: true,
+    unique: true,
+  },
 
-  // giftCardCode: {
-  //   type: DataTypes.STRING,
-  //   allowNull: true,
-  // },
-
-  // giftCardBalance: {
-  //   type: DataTypes.DECIMAL(10, 2),
-  //   allowNull: true,
-  //   defaultValue: 0.00,
-  // },
+  nector_lead_id: {
+    type: DataTypes.STRING(100),
+    allowNull: true,
+  },
 
 }, {
   tableName: 'Customers',
   timestamps: true,
-  // hooks: {
-  //   afterCreate: async (customer, options) => {
-  //     await Cart.create({
-  //       customerId: customer.id
-  //     });
-  //   }
-  // }
+  hooks: {
+    beforeValidate: (customer) => {
+      if (!customer.customer_uuid) {
+        const crypto = require('crypto');
+        customer.customer_uuid = `USR_${crypto.randomUUID()}`;
+      }
+    }
+  }
 });
 
 module.exports = Customers;

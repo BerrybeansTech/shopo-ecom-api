@@ -196,8 +196,20 @@ const createCustomers = async (req, res) => {
 
     await transaction.commit();
 
+    // Sync customer to Nector
+    try {
+      const { syncCustomer } = require("../nectorController");
+      const leadId = await syncCustomer(customer);
+      if (leadId && typeof leadId === "string") {
+        await customer.update({ nector_lead_id: leadId });
+      }
+    } catch (syncErr) {
+      console.error("Nector customer sync failed on Local Signup:", syncErr.message);
+    }
+
     const payload = {
       id: customer.id,
+      customer_uuid: customer.customer_uuid,
       name: customer.name,
       email: customer.email,
       phone: customer.phone,
@@ -284,8 +296,29 @@ const customerLogin = async (req, res) => {
       });
     }
 
+    if (!user.customer_uuid) {
+      const crypto = require('crypto');
+      user.customer_uuid = `USR_${crypto.randomUUID()}`;
+      await user.save();
+    }
+
+    // Sync customer to Nector if they don't have a lead ID yet
+    if (!user.nector_lead_id) {
+      try {
+        const { syncCustomer } = require("../nectorController");
+        const leadId = await syncCustomer(user);
+        if (leadId && typeof leadId === "string") {
+          user.nector_lead_id = leadId;
+          await user.save();
+        }
+      } catch (syncErr) {
+        console.error("Nector customer sync failed on Local Login:", syncErr.message);
+      }
+    }
+
     const payload = {
       id: user.id,
+      customer_uuid: user.customer_uuid,
       name: user.name,
       email: user.email,
       phone: user.phone,
@@ -471,6 +504,17 @@ const updateCustomers = async (req, res) => {
     );
 
     await transaction.commit();
+
+    // Sync updated customer details to Nector
+    try {
+      const updatedCustomer = await Customers.findByPk(id);
+      if (updatedCustomer) {
+        const { syncCustomer } = require("../nectorController");
+        await syncCustomer(updatedCustomer, "customer_updated");
+      }
+    } catch (syncErr) {
+      console.error("Nector customer sync failed on update:", syncErr.message);
+    }
 
     res.json({ success: true, message: "Customer updated successfully" });
   } catch (error) {
@@ -691,16 +735,49 @@ const googleLogin = async (req, res) => {
         customerId: user.id,
         isActive: true,
       });
+
+      // Sync customer to Nector
+      try {
+        const { syncCustomer } = require("../nectorController");
+        const leadId = await syncCustomer(user);
+        if (leadId && typeof leadId === "string") {
+          user.nector_lead_id = leadId;
+          await user.save();
+        }
+      } catch (syncErr) {
+        console.error("Nector customer sync failed on Google Signup:", syncErr.message);
+      }
     } else {
       // If user exists, update their profile and provider info if needed
       user.googleAuthToken = googleId;
       user.loginType = 'google';
       if (picture) user.profilePicture = picture;
+
+      if (!user.customer_uuid) {
+        const crypto = require('crypto');
+        user.customer_uuid = `USR_${crypto.randomUUID()}`;
+      }
+
       await user.save();
+
+      // Sync customer to Nector if they don't have a lead ID yet
+      if (!user.nector_lead_id) {
+        try {
+          const { syncCustomer } = require("../nectorController");
+          const leadId = await syncCustomer(user);
+          if (leadId && typeof leadId === "string") {
+            user.nector_lead_id = leadId;
+            await user.save();
+          }
+        } catch (syncErr) {
+          console.error("Nector customer sync failed on Google Login:", syncErr.message);
+        }
+      }
     }
 
     const tokenPayload = {
       id: user.id,
+      customer_uuid: user.customer_uuid,
       name: user.name,
       email: user.email,
       phone: user.phone,
@@ -788,6 +865,7 @@ const refreshToken = async (req, res) => {
     // Filter payload to only include necessary fields
     const newPayload = {
       id: payload.id,
+      customer_uuid: payload.customer_uuid,
       name: payload.name,
       email: payload.email,
       phone: payload.phone,

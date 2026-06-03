@@ -19,6 +19,8 @@ const Invoice = require("../models/orders/invoice.model");
 const CustomerAddress = require("../models/customer/customerAddress.model");
 const ComboOffer = require("../models/offers/comboOffer.model");
 const Banner = require("../models/banner/banner.model");
+const Coupon = require("../models/offers/coupon.model");
+
 
 
 // ProductCategory → ProductSubCategory (One-to-Many)
@@ -356,6 +358,7 @@ module.exports = {
   OrderItems,
   Invoice,
   Banner,
+  Coupon,
 };
 
 // Category.hasMany(SubCategory, {

@@ -1,9 +1,11 @@
 const sequelize = require('../../config/db');
+const { Op } = require('sequelize');
 const Orders = require("../../models/orders/order.model");
 const Product = require("../../models/product/product.model");
 const OrderItems = require("../../models/orders/orderItems.model");
 const Customer = require("../../models/customer/customers.model");
 const Invoice = require("../../models/orders/invoice.model");
+const NectorWebhookLogs = require("../../models/nector/nectorWebhookLogs.model");
 const { processShiprocketShipment } = require("../../utils/shipmentHelper");
 const shiprocketService = require("../../services/shiprocket.service");
 
@@ -311,6 +313,8 @@ const createOrder = async (req, res) => {
       paymentMethod,
       orderNote,
       productItems,
+      couponCode,
+      couponDiscount,
     } = req.body;
 
     // GST Calculation Logic (Backend as Source of Truth)
@@ -380,6 +384,8 @@ const createOrder = async (req, res) => {
 
     const isPaid = !!req.body.razorpayPaymentId;
 
+    const discountVal = parseFloat(couponDiscount) || 0;
+
     const newOrder = await Orders.create(
       {
         customerId,
@@ -392,7 +398,7 @@ const createOrder = async (req, res) => {
         totalIGST,
         shippingCharge,
         totalAmount: finalCalculatedTotal,
-        finalAmount: finalCalculatedTotal,
+        finalAmount: Math.max(0, finalCalculatedTotal - discountVal),
         paymentMethod,
         orderNote,
         razorpayOrderId: req.body.razorpayOrderId || null,
@@ -400,6 +406,8 @@ const createOrder = async (req, res) => {
         razorpaySignature: req.body.razorpaySignature || null,
         paymentStatus: isPaid ? "paid" : "pending",
         status: "pending",
+        couponCode: couponCode || null,
+        couponDiscount: discountVal,
       },
       { transaction: t }
     );
@@ -476,7 +484,21 @@ const updateOrder = async (req, res) => {
       });
     }
 
+    const previousStatus = order.status;
+    const isNowDelivered = status && status.toLowerCase() === "delivered";
+
     await Orders.update({ orderNote, status }, { where: { id } });
+
+    if (isNowDelivered && previousStatus?.toLowerCase() !== "delivered" && !order.nector_synced) {
+      const customer = await Customer.findByPk(order.customerId);
+      if (customer) {
+        const { syncOrder } = require("../nectorController");
+        const syncSuccess = await syncOrder(order, customer);
+        if (syncSuccess) {
+          await order.update({ nector_synced: true });
+        }
+      }
+    }
 
     return res.json({
       success: true,
@@ -578,13 +600,27 @@ const trackOrder = async (req, res) => {
 
       // Sync DB if status or EDD updated
       if (track?.current_status || track?.edd) {
+        const isDelivered = track?.current_status?.trim().toUpperCase() === "DELIVERED";
+
         await order.update({
           shipmentStatus: track?.current_status || order.shipmentStatus,
           estimatedDelivery: track?.edd || order.estimatedDelivery,
           awbCode: track?.awb_code || order.awbCode,
           courierName: track?.courier_name || order.courierName,
-          trackingUrl: track?.tracking_url || order.trackingUrl
+          trackingUrl: track?.tracking_url || order.trackingUrl,
+          ...(isDelivered && { status: "delivered" })
         });
+
+        if (isDelivered && !order.nector_synced) {
+          const customer = await Customer.findByPk(order.customerId);
+          if (customer) {
+            const { syncOrder } = require("../nectorController");
+            const syncSuccess = await syncOrder(order, customer);
+            if (syncSuccess) {
+              await order.update({ nector_synced: true });
+            }
+          }
+        }
       }
 
       return res.status(200).json({
@@ -701,6 +737,73 @@ const cancelShiprocketShipment = async (req, res) => {
   }
 };
 
+const shiprocketWebhook = async (req, res) => {
+  try {
+    const webhookSecret = req.headers["x-webhook-secret"];
+    
+    // Log the webhook payload
+    const log = await NectorWebhookLogs.create({
+      event_name: req.body?.current_status || "shiprocket_update",
+      payload: req.body,
+      processed: false
+    });
+
+    if (webhookSecret !== process.env.SHIPROCKET_WEBHOOK_SECRET) {
+      console.warn("⚠️ Unauthorized Shiprocket webhook attempt with secret:", webhookSecret);
+      return res.status(401).json({ success: false, message: "Unauthorized webhook request" });
+    }
+
+    const { awb, status, current_status, order_id } = req.body;
+    const trackingStatus = (current_status || status || "").trim().toUpperCase();
+
+    if (!awb && !order_id) {
+      return res.status(400).json({ success: false, message: "Missing AWB or order ID" });
+    }
+
+    // Find order using AWB or Shiprocket Order ID or internal order ID
+    const order = await Orders.findOne({
+      where: {
+        [Op.or]: [
+          awb ? { awbCode: awb } : null,
+          order_id ? { shiprocketOrderId: String(order_id) } : null,
+          order_id && isNaN(order_id) === false ? { id: order_id } : null
+        ].filter(Boolean)
+      }
+    });
+
+    if (!order) {
+      console.warn(`[Shiprocket Webhook] No matching order found for AWB: ${awb}, Order ID: ${order_id}`);
+      return res.status(200).json({ success: true, message: "No matching order found locally" });
+    }
+
+    const isDelivered = trackingStatus === "DELIVERED";
+    
+    await order.update({
+      shipmentStatus: current_status || order.shipmentStatus,
+      ...(isDelivered && { status: "delivered" })
+    });
+
+    if (isDelivered && !order.nector_synced) {
+      const customer = await Customer.findByPk(order.customerId);
+      if (customer) {
+        const { syncOrder } = require("../nectorController");
+        const syncSuccess = await syncOrder(order, customer);
+        if (syncSuccess) {
+          await order.update({ nector_synced: true });
+        }
+      }
+    }
+
+    // Mark webhook log as processed
+    await log.update({ processed: true });
+
+    return res.status(200).json({ success: true, message: "Webhook processed successfully" });
+  } catch (error) {
+    console.error("❌ Error in Shiprocket Webhook:", error);
+    return res.status(500).json({ success: false, message: error.message });
+  }
+};
+
 module.exports = {
   getAllOrders,
   getOrderDetail,
@@ -711,5 +814,6 @@ module.exports = {
   trackOrder,
   createShiprocketShipment,
   cancelShiprocketShipment,
+  shiprocketWebhook
 };
 
