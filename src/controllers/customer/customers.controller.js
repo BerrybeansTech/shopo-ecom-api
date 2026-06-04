@@ -196,12 +196,13 @@ const createCustomers = async (req, res) => {
 
     await transaction.commit();
 
-    // Sync customer to Nector
+    // Sync customer to Nector (async - Nector processes in background, up to 30s)
     try {
       const { syncCustomer } = require("../nectorController");
       const leadId = await syncCustomer(customer);
       if (leadId && typeof leadId === "string") {
         await customer.update({ nector_lead_id: leadId });
+        customer.nector_lead_id = leadId; // update in-memory object too
       }
     } catch (syncErr) {
       console.error("Nector customer sync failed on Local Signup:", syncErr.message);
@@ -210,6 +211,7 @@ const createCustomers = async (req, res) => {
     const payload = {
       id: customer.id,
       customer_uuid: customer.customer_uuid,
+      nector_lead_id: customer.nector_lead_id || null,
       name: customer.name,
       email: customer.email,
       phone: customer.phone,
@@ -319,6 +321,7 @@ const customerLogin = async (req, res) => {
     const payload = {
       id: user.id,
       customer_uuid: user.customer_uuid,
+      nector_lead_id: user.nector_lead_id || null,
       name: user.name,
       email: user.email,
       phone: user.phone,
@@ -778,6 +781,7 @@ const googleLogin = async (req, res) => {
     const tokenPayload = {
       id: user.id,
       customer_uuid: user.customer_uuid,
+      nector_lead_id: user.nector_lead_id || null,
       name: user.name,
       email: user.email,
       phone: user.phone,
