@@ -58,9 +58,9 @@ app.use(bodyParser.json());
 app.use(morgan("dev"));
 app.use(cookieParser());
 
-app.use(apiRateLimiter);
-
 app.use("/uploads", express.static("uploads"));
+
+app.use(apiRateLimiter);
 
 app.use("/customer", customerRoutes);
 app.use("/otp", otpRoutes);

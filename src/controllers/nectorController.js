@@ -53,10 +53,9 @@ exports.syncCustomer = async (user, topic = "customer_created") => {
     }
   }
 
-  // Per Nector docs: webhook payload id should be the raw customer ID "without any integration prefix".
-  // Nector internally stores them and the SDK prepends "custom-" when querying.
+  // Prefix custom- is required for custom platform integrations so that the webhook ID matches the SDK queried ID.
   const payload = {
-    id: user.customer_uuid,
+    id: `custom-${user.customer_uuid}`,
     first_name,
     last_name,
     email: user.email,
@@ -89,8 +88,8 @@ exports.syncCustomer = async (user, topic = "customer_created") => {
     );
 
     await logActivity(user.customer_uuid, `customer_${topic}`, payload, response.data, "success");
-    console.log(`✅ [Nector] Customer webhook sync (${topic}) succeeded. Nector ID: ${user.customer_uuid}`);
-    return user.customer_uuid;
+    console.log(`✅ [Nector] Customer webhook sync (${topic}) succeeded. Nector ID: custom-${user.customer_uuid}`);
+    return `custom-${user.customer_uuid}`;
   } catch (err) {
     const errorData = err.response?.data || { message: err.message };
     console.error(`❌ [Nector] Customer webhook sync (${topic}) failed:`, JSON.stringify(errorData, null, 2));
@@ -151,9 +150,9 @@ exports.syncOrder = async (order, user) => {
     }
   }
 
-  // Per Nector docs: customer id in order payload should also be the raw ID (no prefix)
+  // Per Nector docs: customer id in order payload should also be prefixed with custom- for custom platforms
   const customerObj = {
-    id: user.customer_uuid,
+    id: `custom-${user.customer_uuid}`,
     first_name,
     last_name,
     email: user.email,

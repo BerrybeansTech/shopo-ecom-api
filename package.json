@@ -3,7 +3,8 @@
   "version": "1.0.0",
   "main": "server.js",
   "scripts": {
-    "dev": "nodemon"
+    "dev": "nodemon",
+    "sync-nector": "node src/scripts/syncAllCustomers.js"
   },
   "author": "s.n.sanjay",
   "engines": {
