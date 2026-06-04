@@ -53,6 +53,8 @@ exports.syncCustomer = async (user, topic = "customer_created") => {
     }
   }
 
+  // Per Nector docs: webhook payload id should be the raw customer ID "without any integration prefix".
+  // Nector internally stores them and the SDK prepends "custom-" when querying.
   const payload = {
     id: user.customer_uuid,
     first_name,
@@ -87,7 +89,7 @@ exports.syncCustomer = async (user, topic = "customer_created") => {
     );
 
     await logActivity(user.customer_uuid, `customer_${topic}`, payload, response.data, "success");
-    console.log(`✅ [Nector] Customer webhook sync (${topic}) succeeded.`);
+    console.log(`✅ [Nector] Customer webhook sync (${topic}) succeeded. Nector ID: ${user.customer_uuid}`);
     return user.customer_uuid;
   } catch (err) {
     const errorData = err.response?.data || { message: err.message };
@@ -149,6 +151,7 @@ exports.syncOrder = async (order, user) => {
     }
   }
 
+  // Per Nector docs: customer id in order payload should also be the raw ID (no prefix)
   const customerObj = {
     id: user.customer_uuid,
     first_name,
@@ -366,17 +369,19 @@ exports.getLeadToken = async (req, res) => {
     }
 
     const timestamp = Math.floor(Date.now() / 1000);
-    const payloadStr = `${customerUuid}:${timestamp}`;
+    // Use the same prefixed ID format as the Nector SDK uses
+    const nectorCustomerId = `custom-${customerUuid}`;
+    const payloadStr = `${nectorCustomerId}:${timestamp}`;
 
     const digest = crypto
       .createHmac("sha256", process.env.NECTOR_SIGNING_SECRET || "")
       .update(payloadStr)
       .digest("hex");
 
-    console.log("📡 [Nector] Requesting Lead Token for:", customerUuid);
+    console.log("📡 [Nector] Requesting Lead Token for:", nectorCustomerId);
     const response = await axiosInstance.get("/api/v2/merchant/leads/random-id", {
       params: {
-        customer_id: customerUuid
+        customer_id: nectorCustomerId
       },
       headers: {
         "x-timestamp": timestamp,
