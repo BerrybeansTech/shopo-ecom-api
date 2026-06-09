@@ -14,6 +14,9 @@ router.get('/track-order/:id', authenticateToken, orderController.trackOrder);
 router.post('/create-shipment/:id', authenticateToken, orderController.createShiprocketShipment);
 router.post('/cancel-shipment/:id', authenticateToken, orderController.cancelShiprocketShipment);
 router.post('/shiprocket-webhook', orderController.shiprocketWebhook);
+router.get('/shiprocket/config', authenticateToken, orderController.getShiprocketConfig);
+router.get('/shiprocket/serviceability', authenticateToken, orderController.checkShiprocketServiceability);
+router.get('/shiprocket/webhook-logs', authenticateToken, orderController.getShiprocketWebhookLogs);
 
 
 // Invoice routes

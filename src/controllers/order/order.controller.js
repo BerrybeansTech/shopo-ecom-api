@@ -487,7 +487,7 @@ const updateOrder = async (req, res) => {
     const previousStatus = order.status;
     const isNowDelivered = status && status.toLowerCase() === "delivered";
 
-    await Orders.update({ orderNote, status }, { where: { id } });
+    await order.update({ orderNote, status });
 
     if (isNowDelivered && previousStatus?.toLowerCase() !== "delivered" && !order.nector_synced) {
       const customer = await Customer.findByPk(order.customerId);
@@ -804,6 +804,89 @@ const shiprocketWebhook = async (req, res) => {
   }
 };
 
+const checkShiprocketServiceability = async (req, res) => {
+  try {
+    const { delivery_postcode, weight, cod } = req.query;
+    if (!delivery_postcode) {
+      return res.status(400).json({ success: false, message: "Delivery postcode is required" });
+    }
+
+    const params = {
+      pickup_postcode: process.env.SHIPROCKET_PICKUP_POSTCODE || "604408",
+      delivery_postcode,
+      weight: parseFloat(weight) || 0.5,
+      cod: parseInt(cod) || 0
+    };
+
+    console.log("📡 Checking serviceability with params:", params);
+    const data = await shiprocketService.checkServiceability(params);
+    return res.status(200).json({ success: true, data });
+  } catch (error) {
+    console.error("Error checking Shiprocket serviceability:", error);
+    return res.status(500).json({ 
+      success: false, 
+      message: "Failed to check serviceability from Shiprocket",
+      error: error.response?.data || error.message 
+    });
+  }
+};
+
+const getShiprocketConfig = async (req, res) => {
+  try {
+    console.log("🔍 [Debug getShiprocketConfig] env email:", process.env.SHIPROCKET_EMAIL);
+    console.log("🔍 [Debug getShiprocketConfig] env password:", process.env.SHIPROCKET_PASSWORD ? "SET" : "NOT SET");
+    const isEmailSet = !!process.env.SHIPROCKET_EMAIL;
+    const isPasswordSet = !!process.env.SHIPROCKET_PASSWORD;
+    const pickupLocation = process.env.SHIPROCKET_PICKUP_LOCATION || "Primary";
+    const pickupPostcode = process.env.SHIPROCKET_PICKUP_POSTCODE || "604408";
+
+    return res.status(200).json({
+      success: true,
+      config: {
+        configured: isEmailSet && isPasswordSet,
+        email: isEmailSet ? `${process.env.SHIPROCKET_EMAIL.substring(0, 3)}***` : null,
+        pickupLocation,
+        pickupPostcode
+      }
+    });
+  } catch (error) {
+    return res.status(500).json({ success: false, message: error.message });
+  }
+};
+
+const getShiprocketWebhookLogs = async (req, res) => {
+  try {
+    const page = parseInt(req.query.page) || 1;
+    const limit = parseInt(req.query.limit) || 10;
+    const offset = (page - 1) * limit;
+
+    const { count, rows } = await NectorWebhookLogs.findAndCountAll({
+      where: {
+        event_name: {
+          [Op.notIn]: ['coupon_update', 'nector_webhook_received']
+        }
+      },
+      order: [["created_at", "DESC"]],
+      limit,
+      offset
+    });
+
+    return res.status(200).json({
+      success: true,
+      data: rows,
+      pagination: {
+        total: count,
+        page,
+        limit,
+        totalPages: Math.ceil(count / limit),
+      }
+    });
+  } catch (error) {
+    console.error("Error fetching Shiprocket webhook logs:", error);
+    return res.status(500).json({ success: false, message: error.message });
+  }
+};
+
 module.exports = {
   getAllOrders,
   getOrderDetail,
@@ -814,6 +897,9 @@ module.exports = {
   trackOrder,
   createShiprocketShipment,
   cancelShiprocketShipment,
-  shiprocketWebhook
+  shiprocketWebhook,
+  checkShiprocketServiceability,
+  getShiprocketConfig,
+  getShiprocketWebhookLogs
 };
 

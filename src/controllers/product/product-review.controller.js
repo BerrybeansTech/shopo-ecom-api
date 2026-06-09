@@ -103,6 +103,18 @@ exports.createReview = async (req, res) => {
       data: cleanedReview
     });
 
+    // Trigger Nector Review Reward program asynchronously
+    try {
+      const { triggerReward } = require("../nectorController");
+      const triggerId = process.env.NECTOR_REVIEW_TRIGGER_ID || "cbe4ddb3-1a28-40f5-b718-5066e0cc5b29";
+      triggerReward(customer, triggerId).catch((err) => {
+        console.error("❌ Failed to trigger review reward asynchronously:", err.message);
+      });
+    } catch (nectorErr) {
+      console.error("❌ Failed to import or call triggerReward:", nectorErr.message);
+    }
+
+
   } catch (error) {
     console.error("Create Review Error:", error);
 

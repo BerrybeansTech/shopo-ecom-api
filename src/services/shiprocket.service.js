@@ -77,9 +77,28 @@ const cancelShipment = async (shipmentIds) => {
     }
 };
 
+const checkServiceability = async (params) => {
+    try {
+        const token = await loginShiprocket();
+        console.log("📡 [Shiprocket] Checking serviceability for params:", params);
+        
+        const response = await axios.get(`${SHIPROCKET_API_URL}/courier/serviceability/`, {
+            params,
+            headers: {
+                Authorization: `Bearer ${token}`
+            }
+        });
+        return response.data;
+    } catch (error) {
+        console.error('Shiprocket Serviceability Error:', error.response?.data || error.message);
+        throw error;
+    }
+};
+
 module.exports = {
     loginShiprocket,
     createShipment,
     trackShipment,
-    cancelShipment
+    cancelShipment,
+    checkServiceability
 };

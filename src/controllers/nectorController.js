@@ -6,6 +6,7 @@ const Customers = require("../models/customer/customers.model");
 const Coupon = require("../models/offers/coupon.model");
 const OrderItems = require("../models/orders/orderItems.model");
 const crypto = require("crypto");
+const { Op } = require("sequelize");
 
 /**
  * Helper to record Nector activity logs.
@@ -131,6 +132,32 @@ exports.syncOrder = async (order, user) => {
     nectorStatus = "pending";
   }
 
+  // Map financial status (payment)
+  let financialStatus = "pending";
+  const localPaymentStatus = (order.paymentStatus || "").toLowerCase();
+  if (localPaymentStatus === "paid" || localStatus === "delivered" || localStatus === "complete") {
+    financialStatus = "paid";
+  } else if (localPaymentStatus === "refunded") {
+    financialStatus = "refunded";
+  } else if (localPaymentStatus === "failed") {
+    financialStatus = "voided";
+  } else {
+    financialStatus = "pending";
+  }
+
+  // Map fulfillment/delivery status
+  let fulfillmentStatus = "unfulfilled";
+  const localShipmentStatus = (order.shipmentStatus || "").toLowerCase();
+  if (localShipmentStatus === "delivered" || localStatus === "delivered" || localStatus === "complete") {
+    fulfillmentStatus = "fulfilled";
+  } else if (localShipmentStatus === "shipped" || localShipmentStatus === "in_transit" || localStatus === "shipped") {
+    fulfillmentStatus = "partial";
+  } else if (localShipmentStatus === "returned" || localStatus === "returned") {
+    fulfillmentStatus = "restocked";
+  } else {
+    fulfillmentStatus = "unfulfilled";
+  }
+
   // Format customer object
   const nameParts = (user.name || "").trim().split(/\s+/);
   const first_name = nameParts[0] || "";
@@ -186,6 +213,9 @@ exports.syncOrder = async (order, user) => {
     id: order.id,
     created_at: order.createdAt ? order.createdAt.toISOString() : new Date().toISOString(),
     status: nectorStatus,
+    financial_status: financialStatus,
+    fulfillment_status: fulfillmentStatus,
+    delivery_status: fulfillmentStatus === "fulfilled" ? "delivered" : "pending",
     name: `Order #${order.id}`,
     currency: "inr",
     total: parseFloat(order.subTotal || 0),
@@ -247,8 +277,12 @@ exports.handleWebhook = async (req, res) => {
       processed: false
     });
 
-    // Verify secret signature
-    if (secret !== process.env.NECTOR_WEBHOOK_SECRET) {
+    // Verify secret signature (supports plaintext or SHA-256 hash of the secret)
+    const plainSecret = process.env.NECTOR_WEBHOOK_SECRET || "";
+    const hashedSecret = crypto.createHash("sha256").update(plainSecret).digest("hex");
+    const isValidSecret = (secret === plainSecret) || (secret === hashedSecret);
+
+    if (!isValidSecret) {
       console.warn("⚠️ Unauthorized Nector webhook attempt with secret:", secret);
       return res.status(401).json({ success: false, message: "Unauthorized webhook request" });
     }
@@ -401,3 +435,177 @@ exports.getLeadToken = async (req, res) => {
     });
   }
 };
+
+/**
+ * Trigger a reward using a specific Trigger ID.
+ */
+exports.triggerReward = async (user, triggerId) => {
+  if (!triggerId) {
+    console.error("❌ No triggerId provided to triggerReward.");
+    return false;
+  }
+
+  // Final customer ID in Nector: prefixed with custom_website-
+  const finalCustomerId = `custom_website-custom-${user.customer_uuid}`;
+
+  const payload = {
+    trigger_id: triggerId,
+    customer_id: finalCustomerId
+  };
+
+  console.log("📡 [Nector] Triggering Reward Activity:");
+  console.log("- Trigger ID:", triggerId);
+  console.log("- Customer ID:", finalCustomerId);
+
+  try {
+    const response = await axiosInstance.post("/api/v2/merchant/activities", payload);
+    await logActivity(user.customer_uuid, `activity_reward_${triggerId}`, payload, response.data, "success");
+    console.log(`✅ [Nector] Reward trigger ${triggerId} succeeded for ${finalCustomerId}`);
+    return response.data;
+  } catch (err) {
+    const errorData = err.response?.data || { message: err.message };
+    console.error(`❌ [Nector] Reward trigger ${triggerId} failed:`, JSON.stringify(errorData, null, 2));
+    await logActivity(user.customer_uuid, `activity_reward_${triggerId}`, payload, errorData, "failed");
+    return false;
+  }
+};
+
+exports.getSettings = async (req, res) => {
+  try {
+    const isApiKeySet = !!process.env.NECTOR_API_KEY;
+    const isWebhookIdSet = !!process.env.NECTOR_WEBHOOK_ID;
+    const isWebhookSecretSet = !!process.env.NECTOR_WEBHOOK_SECRET;
+    const isSigningSecretSet = !!process.env.NECTOR_SIGNING_SECRET;
+
+    console.log("🔍 [Debug getSettings] isApiKeySet:", isApiKeySet, "isWebhookIdSet:", isWebhookIdSet, "isWebhookSecretSet:", isWebhookSecretSet);
+
+    return res.json({
+      success: true,
+      config: {
+        configured: isApiKeySet && (isWebhookIdSet || isWebhookSecretSet),
+        apiKey: isApiKeySet ? `${process.env.NECTOR_API_KEY.substring(0, 5)}***` : null,
+        webhookId: isWebhookIdSet ? `${process.env.NECTOR_WEBHOOK_ID.substring(0, 5)}***` : null,
+        platform: process.env.NECTOR_PLATFORM || "custom_website",
+        hasSigningSecret: isSigningSecretSet
+      }
+    });
+  } catch (error) {
+    return res.status(500).json({ success: false, message: error.message });
+  }
+};
+
+exports.getLogs = async (req, res) => {
+  try {
+    const page = parseInt(req.query.page) || 1;
+    const limit = parseInt(req.query.limit) || 10;
+    const offset = (page - 1) * limit;
+
+    const { count, rows } = await NectorLogs.findAndCountAll({
+      order: [["createdAt", "DESC"]],
+      limit,
+      offset
+    });
+
+    return res.json({
+      success: true,
+      data: rows,
+      pagination: {
+        total: count,
+        page,
+        limit,
+        totalPages: Math.ceil(count / limit)
+      }
+    });
+  } catch (error) {
+    console.error("Error fetching Nector logs:", error);
+    return res.status(500).json({ success: false, message: error.message });
+  }
+};
+
+exports.getWebhookLogs = async (req, res) => {
+  try {
+    const page = parseInt(req.query.page) || 1;
+    const limit = parseInt(req.query.limit) || 10;
+    const offset = (page - 1) * limit;
+
+    const { count, rows } = await NectorWebhookLogs.findAndCountAll({
+      where: {
+        event_name: {
+          [Op.in]: ['coupon_update', 'nector_webhook_received']
+        }
+      },
+      order: [["created_at", "DESC"]],
+      limit,
+      offset
+    });
+
+    return res.json({
+      success: true,
+      data: rows,
+      pagination: {
+        total: count,
+        page,
+        limit,
+        totalPages: Math.ceil(count / limit)
+      }
+    });
+  } catch (error) {
+    console.error("Error fetching Nector webhook logs:", error);
+    return res.status(500).json({ success: false, message: error.message });
+  }
+};
+
+exports.manualSyncCustomer = async (req, res) => {
+  try {
+    const { id } = req.params;
+    const customer = await Customers.findByPk(id);
+
+    if (!customer) {
+      return res.status(404).json({ success: false, message: "Customer not found" });
+    }
+
+    console.log(`📡 Manual Customer Sync triggered for UUID: ${customer.customer_uuid}`);
+    const leadId = await exports.syncCustomer(customer, "customer_created");
+
+    if (leadId) {
+      await customer.update({ nector_lead_id: leadId });
+      return res.json({ success: true, message: "Customer synced successfully with Nector", leadId });
+    } else {
+      return res.status(500).json({ success: false, message: "Failed to sync customer with Nector. Check backend logs." });
+    }
+  } catch (error) {
+    console.error("Error in manualSyncCustomer:", error);
+    return res.status(500).json({ success: false, message: error.message });
+  }
+};
+
+exports.manualSyncOrder = async (req, res) => {
+  try {
+    const { id } = req.params;
+    const Orders = require("../models/orders/order.model");
+    const order = await Orders.findByPk(id);
+
+    if (!order) {
+      return res.status(404).json({ success: false, message: "Order not found" });
+    }
+
+    const customer = await Customers.findByPk(order.customerId);
+    if (!customer) {
+      return res.status(404).json({ success: false, message: "Customer linked to order not found" });
+    }
+
+    console.log(`📡 Manual Order Sync triggered for Order ID: ${order.id}`);
+    const success = await exports.syncOrder(order, customer);
+
+    if (success) {
+      await order.update({ nector_synced: true });
+      return res.json({ success: true, message: "Order synced successfully with Nector" });
+    } else {
+      return res.status(500).json({ success: false, message: "Failed to sync order with Nector. Check backend logs." });
+    }
+  } catch (error) {
+    console.error("Error in manualSyncOrder:", error);
+    return res.status(500).json({ success: false, message: error.message });
+  }
+};
+

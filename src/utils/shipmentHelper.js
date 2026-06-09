@@ -29,6 +29,22 @@ const processShiprocketShipment = async (orderId, transaction = null) => {
             throw new Error("Customer phone number is missing. Cannot create Shiprocket shipment.");
         }
 
+        // Format phone number to exactly 10 digits for Shiprocket
+        const digits = customerPhone.replace(/\D/g, '');
+        let formattedPhone = digits;
+        if (digits.length === 12 && digits.startsWith('91')) {
+            formattedPhone = digits.substring(2);
+        } else if (digits.length === 11 && digits.startsWith('0')) {
+            formattedPhone = digits.substring(1);
+        } else if (digits.length > 10) {
+            formattedPhone = digits.slice(-10);
+        }
+        
+        if (formattedPhone.length !== 10) {
+            console.warn(`⚠️ Phone number ${customerPhone} formatted to ${formattedPhone} is not 10 digits.`);
+        }
+
+
         console.log("📦 [Shiprocket] Mapping payload for Order #", order.id);
         // Map internal order to Shiprocket format
         const shiprocketData = {
@@ -43,7 +59,7 @@ const processShiprocketShipment = async (orderId, transaction = null) => {
             billing_state: order.Customer?.state || "Tamil Nadu",
             billing_country: order.Customer?.country || "India",
             billing_email: order.Customer?.email || "customer@example.com",
-            billing_phone: customerPhone,
+            billing_phone: formattedPhone,
             shipping_is_billing: true,
             order_items: order.OrderItems.map(item => ({
                 name: item.productName,
