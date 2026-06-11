@@ -11,5 +11,6 @@ router.get("/logs", authenticateToken, nectorController.getLogs);
 router.get("/webhook-logs", authenticateToken, nectorController.getWebhookLogs);
 router.post("/sync-customer/:id", authenticateToken, nectorController.manualSyncCustomer);
 router.post("/sync-order/:id", authenticateToken, nectorController.manualSyncOrder);
+router.get("/coupons", authenticateToken, nectorController.getCoupons);
 
 module.exports = router;

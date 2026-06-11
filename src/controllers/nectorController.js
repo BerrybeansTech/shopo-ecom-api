@@ -564,6 +564,10 @@ exports.manualSyncCustomer = async (req, res) => {
       return res.status(404).json({ success: false, message: "Customer not found" });
     }
 
+    if (customer.nector_lead_id) {
+      return res.json({ success: true, message: "Customer is already synced!" });
+    }
+
     console.log(`📡 Manual Customer Sync triggered for UUID: ${customer.customer_uuid}`);
     const leadId = await exports.syncCustomer(customer, "customer_created");
 
@@ -589,6 +593,10 @@ exports.manualSyncOrder = async (req, res) => {
       return res.status(404).json({ success: false, message: "Order not found" });
     }
 
+    if (order.nector_synced) {
+      return res.json({ success: true, message: "Order is already synced!" });
+    }
+
     const customer = await Customers.findByPk(order.customerId);
     if (!customer) {
       return res.status(404).json({ success: false, message: "Customer linked to order not found" });
@@ -608,4 +616,173 @@ exports.manualSyncOrder = async (req, res) => {
     return res.status(500).json({ success: false, message: error.message });
   }
 };
+
+exports.getCoupons = async (req, res) => {
+  try {
+    const Orders = require("../models/orders/order.model");
+    const Customers = require("../models/customer/customers.model");
+    const page = parseInt(req.query.page) || 1;
+    const limit = parseInt(req.query.limit) || 10;
+    const offset = (page - 1) * limit;
+
+    const { count, rows } = await Coupon.findAndCountAll({
+      order: [["createdAt", "DESC"]],
+      limit,
+      offset
+    });
+
+    // Find all coupon codes used in any orders
+    const allUsedCouponCodes = await Orders.findAll({
+      attributes: ["couponCode"],
+      where: {
+        couponCode: {
+          [Op.ne]: null
+        }
+      },
+      raw: true
+    }).then(orders => orders.map(o => o.couponCode).filter(Boolean));
+
+    // Fetch metrics
+    const totalCount = await Coupon.count();
+    
+    const activeCount = await Coupon.count({
+      where: {
+        status: "issued",
+        code: {
+          [Op.notIn]: allUsedCouponCodes.length > 0 ? allUsedCouponCodes : ["__DUMMY__"]
+        },
+        [Op.or]: [
+          { expireAt: null },
+          { expireAt: { [Op.gt]: new Date() } }
+        ]
+      }
+    });
+
+    const expiredCount = await Coupon.count({
+      where: {
+        status: "issued",
+        code: {
+          [Op.notIn]: allUsedCouponCodes.length > 0 ? allUsedCouponCodes : ["__DUMMY__"]
+        },
+        expireAt: { [Op.lt]: new Date() }
+      }
+    });
+
+    const usedCount = await Coupon.count({
+      where: {
+        [Op.or]: [
+          {
+            status: {
+              [Op.in]: ["used", "redeemed", "complete"]
+            }
+          },
+          {
+            code: {
+              [Op.in]: allUsedCouponCodes
+            }
+          }
+        ]
+      }
+    });
+
+    // Fetch the recent webhook logs to find matches for customer emails/IDs.
+    const webhookLogs = await NectorWebhookLogs.findAll({
+      where: {
+        event_name: "coupon_update"
+      },
+      order: [["created_at", "DESC"]],
+      limit: 100
+    });
+
+    const couponsWithCustomer = await Promise.all(rows.map(async (coupon) => {
+      const couponData = coupon.toJSON();
+      
+      // Look up matching order
+      const matchingOrder = await Orders.findOne({
+        where: {
+          couponCode: coupon.code
+        },
+        attributes: ["id", "status", "finalAmount", "createdAt"],
+        raw: true
+      });
+
+      if (matchingOrder) {
+        couponData.status = "used";
+        couponData.order = {
+          id: matchingOrder.id,
+          status: matchingOrder.status,
+          finalAmount: parseFloat(matchingOrder.finalAmount || 0),
+          createdAt: matchingOrder.createdAt
+        };
+      } else {
+        couponData.order = null;
+      }
+      
+      const matchingLog = webhookLogs.find(
+        (log) => log.payload && String(log.payload.value).trim().toLowerCase() === String(coupon.code).trim().toLowerCase()
+      );
+      
+      if (matchingLog && matchingLog.payload && matchingLog.payload.customer) {
+        const payloadCustomer = { ...matchingLog.payload.customer };
+        
+        // Find local customer by email or customer_uuid
+        const uuidToFind = payloadCustomer.id ? payloadCustomer.id.replace(/^custom-/, "") : null;
+        const whereClause = {};
+        if (uuidToFind) {
+          whereClause.customer_uuid = uuidToFind;
+        } else if (payloadCustomer.email) {
+          whereClause.email = payloadCustomer.email;
+        }
+
+        if (Object.keys(whereClause).length > 0) {
+          const localCustomer = await Customers.findOne({
+            where: whereClause,
+            attributes: ["phone", "country", "nector_lead_id"],
+            raw: true
+          });
+          if (localCustomer) {
+            payloadCustomer.mobile = localCustomer.phone || "";
+            payloadCustomer.country = localCustomer.country || "";
+            payloadCustomer.nector_lead_id = localCustomer.nector_lead_id || "";
+          } else {
+            payloadCustomer.mobile = "";
+            payloadCustomer.country = "";
+            payloadCustomer.nector_lead_id = payloadCustomer.id || "";
+          }
+        } else {
+          payloadCustomer.mobile = "";
+          payloadCustomer.country = "";
+          payloadCustomer.nector_lead_id = payloadCustomer.id || "";
+        }
+        
+        couponData.customer = payloadCustomer;
+      } else {
+        couponData.customer = null;
+      }
+      
+      return couponData;
+    }));
+
+    return res.json({
+      success: true,
+      data: couponsWithCustomer,
+      metrics: {
+        total: totalCount,
+        active: activeCount,
+        expired: expiredCount,
+        used: usedCount
+      },
+      pagination: {
+        total: count,
+        page,
+        limit,
+        totalPages: Math.ceil(count / limit)
+      }
+    });
+  } catch (error) {
+    console.error("Error fetching coupons:", error);
+    return res.status(500).json({ success: false, message: error.message });
+  }
+};
+
 

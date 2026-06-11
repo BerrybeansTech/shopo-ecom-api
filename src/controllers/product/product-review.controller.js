@@ -41,6 +41,9 @@ exports.createReview = async (req, res) => {
       });
     }
 
+
+    // Allow multiple reviews per customer per product
+    /*
     const existingReview = await ProductReview.findOne({
       where: { productId, customerId }
     });
@@ -51,6 +54,8 @@ exports.createReview = async (req, res) => {
         message: "You have already reviewed this product"
       });
     }
+    */
+
 
     // ✅ Handle images SAME as product API
     let imagePaths = [];
