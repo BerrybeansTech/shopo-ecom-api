@@ -113,6 +113,7 @@ router.delete("/size-chart/delete/:id", authenticateToken, sizeChartController.d
 
 router.post("/review/create", authenticateToken, upload.array("images", 10), ProductReviewController.createReview);
 router.get("/review/get-all", authenticateToken, ProductReviewController.getAllReviews);
+router.get("/review/admin/get-all", authenticateToken, ProductReviewController.getAllReviewsAdmin);
 router.get("/review/get-by-product/:productId", ProductReviewController.getReviewsByProduct);
 router.get("/review/get-review/:id", ProductReviewController.getReviewById);
 router.put("/review/update/:id", authenticateToken, upload.array("images", 10), ProductReviewController.updateReview);

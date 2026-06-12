@@ -1,13 +1,15 @@
 const ProductReview = require("../../models/product/product-review");
 const Product = require("../../models/product/product.model");
 const Customer = require("../../models/customer/customers.model");
+const AdminUser = require("../../models/adminUser/AdminUser.model");
+const { Op } = require("sequelize");
 const path = require("path");
 const fs = require("fs");
 
 
 exports.createReview = async (req, res) => {
   try {
-    const { productId, rating, comment } = req.body;
+    const { productId, rating, comment, orderId } = req.body;
     const customerId = req.user.id;
 
     if (!productId || !/^\d+$/.test(productId)) {
@@ -99,7 +101,7 @@ exports.createReview = async (req, res) => {
     );
 
     cleanedReview.images = flatImgArr
-      .filter(img => typeof img === 'string')
+      .filter(img => typeof img === 'string' && img.trim() !== '')
       .map(img => `${baseUrl}${img.replace(/[\\\[\]"]/g, "").replace(/^[\\\/]+/, "")}`);
 
     res.status(201).json({
@@ -108,15 +110,19 @@ exports.createReview = async (req, res) => {
       data: cleanedReview
     });
 
-    // Trigger Nector Review Reward program asynchronously
+    // Sync Review to Nector asynchronously using the new Create Review API
     try {
-      const { triggerReward } = require("../nectorController");
-      const triggerId = process.env.NECTOR_REVIEW_TRIGGER_ID || "cbe4ddb3-1a28-40f5-b718-5066e0cc5b29";
-      triggerReward(customer, triggerId).catch((err) => {
-        console.error("❌ Failed to trigger review reward asynchronously:", err.message);
+      const { createReviewInNector } = require("../nectorController");
+      
+      if (orderId) {
+        review.orderId = orderId;
+      }
+      
+      createReviewInNector(review, customer, product, req.get("host")).catch((err) => {
+        console.error("❌ Failed to create review in Nector asynchronously:", err.message);
       });
     } catch (nectorErr) {
-      console.error("❌ Failed to import or call triggerReward:", nectorErr.message);
+      console.error("❌ Failed to import or call Nector helper:", nectorErr.message);
     }
 
 
@@ -182,7 +188,7 @@ exports.getAllReviews = async (req, res) => {
       );
 
       data.images = flatImages
-        .filter(img => typeof img === 'string')
+        .filter(img => typeof img === 'string' && img.trim() !== '')
         .map(img => `${baseUrl}${img.replace(/[\\\[\]"]/g, "").replace(/^[\\\/]+/, "")}`);
 
       // Format Product thumbnail
@@ -199,6 +205,106 @@ exports.getAllReviews = async (req, res) => {
     });
   } catch (error) {
     console.error("Get All Reviews Error:", error);
+    res.status(500).json({
+      success: false,
+      message: "Internal server error occurred while fetching reviews"
+    });
+  }
+};
+
+exports.getAllReviewsAdmin = async (req, res) => {
+  try {
+    const { page = 1, limit = 10, search, rating } = req.query;
+
+    const pageNum = Math.max(1, parseInt(page, 10));
+    const limitNum = Math.min(100, Math.max(1, parseInt(limit, 10)));
+    const offset = (pageNum - 1) * limitNum;
+
+    const whereClause = {};
+
+    if (rating) {
+      const parsedRating = parseInt(rating, 10);
+      if (!isNaN(parsedRating) && parsedRating >= 1 && parsedRating <= 5) {
+        whereClause.rating = parsedRating;
+      }
+    }
+
+    if (search && search.trim()) {
+      const term = `%${search.trim()}%`;
+      whereClause[Op.or] = [
+        { comment: { [Op.iLike]: term } },
+        { "$Customer.name$": { [Op.iLike]: term } },
+        { "$Product.name$": { [Op.iLike]: term } }
+      ];
+    }
+
+    const { count, rows: reviews } = await ProductReview.findAndCountAll({
+      where: whereClause,
+      include: [
+        {
+          model: Product,
+          attributes: ["id", "name", "thumbnailImage"]
+        },
+        {
+          model: Customer,
+          attributes: ["id", "name", "email", "phone"]
+        }
+      ],
+      order: [["createdAt", "DESC"]],
+      limit: limitNum,
+      offset,
+      distinct: true
+    });
+
+    const host = req.get("host");
+    const protocol = host && host.includes("localhost") ? req.protocol : "https";
+    const baseUrl = `${protocol}://${host}/`;
+
+    const formattedReviews = reviews.map(review => {
+      const data = review.toJSON();
+
+      // Format review images
+      let reviewImages = data.images || [];
+      if (typeof reviewImages === 'string') {
+        try {
+          reviewImages = JSON.parse(reviewImages);
+        } catch (e) {
+          reviewImages = reviewImages.split(',').filter(Boolean);
+        }
+      }
+
+      if (!Array.isArray(reviewImages)) {
+        reviewImages = reviewImages ? [reviewImages] : [];
+      }
+
+      const flatImages = reviewImages.flatMap(img => 
+        typeof img === 'string' ? img.split(',').filter(Boolean) : img
+      );
+
+      data.images = flatImages
+        .filter(img => typeof img === 'string' && img.trim() !== '')
+        .map(img => `${baseUrl}${img.replace(/[\\\[\]"]/g, "").replace(/^[\\\/]+/, "")}`);
+
+      // Format Product thumbnail
+      if (data.Product && data.Product.thumbnailImage) {
+        data.Product.thumbnailImage = `${baseUrl}${data.Product.thumbnailImage.replace(/[\\\[\]"]/g, "").replace(/^[\\\/]+/, "")}`;
+      }
+
+      return data;
+    });
+
+    res.status(200).json({
+      success: true,
+      data: formattedReviews,
+      pagination: {
+        total: count,
+        page: pageNum,
+        limit: limitNum,
+        totalPages: Math.ceil(count / limitNum)
+      }
+    });
+  } catch (error) {
+    console.error("Get All Reviews Admin Error:", error);
     res.status(500).json({
       success: false,
       message: "Internal server error occurred while fetching reviews"
@@ -389,7 +495,7 @@ exports.getReviewsByProduct = async (req, res) => {
       );
 
       data.images = flatImages
-        .filter(img => typeof img === 'string')
+        .filter(img => typeof img === 'string' && img.trim() !== '')
         .map(img => `${baseUrl}${img.replace(/[\\\[\]"]/g, "").replace(/^[\\\/]+/, "")}`);
       
       // Format Product thumbnail if it exists
@@ -486,7 +592,7 @@ exports.getReviewById = async (req, res) => {
     );
 
     data.images = flatImages
-      .filter(img => typeof img === 'string')
+      .filter(img => typeof img === 'string' && img.trim() !== '')
       .map(img => `${baseUrl}${img.replace(/[\\\[\]"]/g, "").replace(/^[\\\/]+/, "")}`);
 
     // Format Product thumbnail
@@ -664,7 +770,7 @@ exports.updateReview = async (req, res) => {
     );
 
     cleanedUpdate.images = flatUpdImages
-      .filter(img => typeof img === 'string')
+      .filter(img => typeof img === 'string' && img.trim() !== '')
       .map(img => `${baseUrl}${img.replace(/[\\\[\]"]/g, "").replace(/^[\\\/]+/, "")}`);
 
     // Format Product thumbnail
@@ -715,7 +821,8 @@ exports.deleteReview = async (req, res) => {
       });
     }
 
-    if (review.customerId !== customerId) {
+    const isAdmin = await AdminUser.findByPk(customerId) !== null;
+    if (review.customerId !== customerId && !isAdmin) {
       return res.status(403).json({
         success: false,
         message: "You can only delete your own reviews"
@@ -723,11 +830,27 @@ exports.deleteReview = async (req, res) => {
     }
 
     // Delete associated images
-    if (review.images && review.images.length > 0) {
-      review.images.forEach(image => {
-        const imagePath = path.join(__dirname, '../../../uploads', image);
-        if (fs.existsSync(imagePath)) {
-          fs.unlinkSync(imagePath);
+    let reviewImages = review.images || [];
+    if (typeof reviewImages === 'string') {
+      try {
+        reviewImages = JSON.parse(reviewImages);
+      } catch (e) {
+        reviewImages = reviewImages.split(',').filter(Boolean);
+      }
+    }
+
+    if (Array.isArray(reviewImages)) {
+      reviewImages.forEach(image => {
+        if (typeof image === 'string') {
+          const cleanImage = image.replace(/[\\\[\]"]/g, "").replace(/^[\\\/]+/, "");
+          const imagePath = path.join(__dirname, '../../../uploads', cleanImage);
+          if (fs.existsSync(imagePath)) {
+            try {
+              fs.unlinkSync(imagePath);
+            } catch (err) {
+              console.warn("Failed to delete review image file:", imagePath);
+            }
+          }
         }
       });
     }

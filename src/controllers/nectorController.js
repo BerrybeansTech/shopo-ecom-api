@@ -263,6 +263,120 @@ exports.syncOrder = async (order, user) => {
 };
 
 /**
+ * Create review in Nector via Nector's Create Review API.
+ */
+exports.createReviewInNector = async (review, user, product, hostHeader = "") => {
+  // Format product image URL
+  const host = hostHeader || "rabbitnfinch.com";
+  const protocol = host.includes("localhost") ? "http" : "https";
+  const baseUrl = `${protocol}://${host}/`;
+  
+  let imageLinks = [];
+  if (review.images) {
+    let rawImages = review.images;
+    if (typeof rawImages === "string") {
+      try {
+        rawImages = JSON.parse(rawImages);
+      } catch (e) {
+        rawImages = rawImages.split(",").filter(Boolean);
+      }
+    }
+    if (Array.isArray(rawImages)) {
+      imageLinks = rawImages
+        .filter(img => typeof img === "string")
+        .map(img => img.startsWith("http") ? img : `${baseUrl}${img.replace(/[\\\[\]"]/g, "").replace(/^[\\\/]+/, "")}`);
+    }
+  }
+
+  // Normalize country to 3-letter lower case (default "ind" as per Indian localization)
+  let countryCode = "ind";
+  if (user.country) {
+    const c = user.country.trim().toLowerCase();
+    if (c === "india" || c === "in" || c === "ind") {
+      countryCode = "ind";
+    } else if (c === "usa" || c === "us" || c === "united states") {
+      countryCode = "usa";
+    } else if (c.length === 3) {
+      countryCode = c;
+    } else {
+      countryCode = c.substring(0, 3);
+    }
+  }
+
+  // Construct metadetail (avoid empty/too short mobile phone issues by omitting it when invalid)
+  const metadetail = {
+    email: user.email
+  };
+  if (user.phone && user.phone.trim().length >= 4 && user.phone.trim().length <= 15) {
+    metadetail.mobile = user.phone.trim();
+    metadetail.country = countryCode;
+  }
+
+  // Optional order_id mapping if available, otherwise attempt to auto-detect a completed order for this customer & product
+  let orderId = review.orderId || review.order_id || null;
+
+  if (!orderId) {
+    try {
+      const Orders = require("../models/orders/order.model");
+      const OrderItems = require("../models/orders/orderItems.model");
+      const { Op } = require("sequelize");
+
+      // Find all order items matching this productId
+      const orderItems = await OrderItems.findAll({
+        where: { productId: product.id },
+        attributes: ['orderId']
+      });
+      const orderIds = orderItems.map(item => item.orderId).filter(Boolean);
+
+      if (orderIds.length > 0) {
+        const completedOrder = await Orders.findOne({
+          where: {
+            id: { [Op.in]: orderIds },
+            customerId: user.id,
+            status: { [Op.in]: ["delivered", "complete"] }
+          },
+          order: [["createdAt", "DESC"]]
+        });
+        if (completedOrder) {
+          orderId = completedOrder.id;
+          console.log(`🔍 [Nector] Auto-detected delivered order ID: ${orderId} for customer ${user.id} and product ${product.id}`);
+        }
+      }
+    } catch (dbErr) {
+      console.error("⚠️ [Nector] Failed to auto-detect order for verified purchase badge:", dbErr.message);
+    }
+  }
+
+  const payload = {
+    metadetail,
+    reference_product_source: "custom_website",
+    reference_product_id: String(product.id),
+    name: user.name || "Anonymous Reviewer",
+    rating: review.rating,
+    description: review.comment || "",
+    image_links: imageLinks
+  };
+
+  if (orderId) {
+    payload.order_id = String(orderId);
+  }
+
+  console.log("📡 [Nector] Creating review with payload:", JSON.stringify(payload, null, 2));
+
+  try {
+    const response = await axiosInstance.post("/api/v2/merchant/reviews", payload);
+    await logActivity(user.customer_uuid, "create_review", payload, response.data, "success");
+    console.log(`✅ [Nector] Create review succeeded. Review ID in Nector: ${response.data?.data?.item?._id || "unknown"}`);
+    return response.data;
+  } catch (err) {
+    const errorData = err.response?.data || { message: err.message };
+    console.error("❌ [Nector] Create review failed:", JSON.stringify(errorData, null, 2));
+    await logActivity(user.customer_uuid, "create_review", payload, errorData, "failed");
+    return false;
+  }
+};
+
+/**
  * Handle incoming webhook notifications from Nector.
  */
 exports.handleWebhook = async (req, res) => {
