@@ -6,6 +6,7 @@ const OrderItems = require("../../models/orders/orderItems.model");
 const Customer = require("../../models/customer/customers.model");
 const Invoice = require("../../models/orders/invoice.model");
 const NectorWebhookLogs = require("../../models/nector/nectorWebhookLogs.model");
+const Coupon = require("../../models/offers/coupon.model");
 const { processShiprocketShipment } = require("../../utils/shipmentHelper");
 const shiprocketService = require("../../services/shiprocket.service");
 
@@ -380,6 +381,45 @@ const createOrder = async (req, res) => {
         success: false,
         message: "Customer not found",
       });
+    }
+
+    if (couponCode && couponCode.trim() !== "") {
+      const trimmedCode = couponCode.trim();
+      if (trimmedCode.toUpperCase() !== "FIRST500") {
+        const couponRecord = await Coupon.findOne({
+          where: {
+            code: trimmedCode,
+            status: "issued"
+          },
+          transaction: t
+        });
+
+        if (!couponRecord) {
+          await t.rollback();
+          return res.status(400).json({ success: false, message: "Invalid or expired coupon code" });
+        }
+
+        // Verify expiry date
+        if (couponRecord.expireAt && new Date() > new Date(couponRecord.expireAt)) {
+          await t.rollback();
+          return res.status(400).json({ success: false, message: "Coupon code has expired" });
+        }
+
+        // Verify single use per customer
+        const alreadyUsed = await Orders.findOne({
+          where: {
+            customerId,
+            couponCode: trimmedCode,
+            status: { [Op.ne]: "cancelled" }
+          },
+          transaction: t
+        });
+
+        if (alreadyUsed) {
+          await t.rollback();
+          return res.status(400).json({ success: false, message: "You have already used this coupon code" });
+        }
+      }
     }
 
     const isPaid = !!req.body.razorpayPaymentId;
@@ -863,7 +903,7 @@ const getShiprocketWebhookLogs = async (req, res) => {
     const { count, rows } = await NectorWebhookLogs.findAndCountAll({
       where: {
         event_name: {
-          [Op.notIn]: ['coupon_update', 'nector_webhook_received']
+          [Op.notIn]: ['coupon_update', 'coupon_updated', 'coupon_create', 'coupon_created', 'nector_webhook_received']
         }
       },
       order: [["created_at", "DESC"]],

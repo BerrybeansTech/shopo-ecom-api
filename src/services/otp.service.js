@@ -1,6 +1,7 @@
 const crypto = require("crypto");
 const nodemailer = require("nodemailer");
 const redisClient = require("../config/redis.config");
+const smsService = require("./sms.service");
 
 const generateOTP = () =>
   Math.floor(100000 + Math.random() * 900000).toString();
@@ -31,13 +32,25 @@ const sendOtp = async ({ type, identifier }) => {
   // Store for 5 minutes
   await redisClient.setEx(key, 300, hashedOtp);
 
-  // await sendEmail(
-  //   identifier,
-  //   `Your OTP for ${type}`,
-  //   `Your OTP for ${type} is: ${otp}. It is valid for 5 minutes.`
-  // );
+  const isEmail = identifier.includes("@");
+  if (isEmail) {
+    // Standard email sending (disabled/unconfigured by default)
+    // await sendEmail(
+    //   identifier,
+    //   `Your OTP for ${type}`,
+    //   `Your OTP for ${type} is: ${otp}. It is valid for 5 minutes.`
+    // );
+  } else {
+    // Send via SMS service provider (mock or msg91)
+    await smsService.sendOtp({ phone: identifier, otp, type });
+  }
 
-  return { success: true, otp: otp, message: "OTP sent successfully" };
+  const isMock = (process.env.SMS_PROVIDER || "mock").toLowerCase().trim() === "mock";
+  if (isEmail || isMock) {
+    return { success: true, otp: otp, message: "OTP sent successfully" };
+  }
+
+  return { success: true, message: "OTP sent successfully" };
 };
 
 const verifyOtp = async ({ type, identifier, otp }) => {

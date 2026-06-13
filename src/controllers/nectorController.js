@@ -401,7 +401,7 @@ exports.handleWebhook = async (req, res) => {
       return res.status(401).json({ success: false, message: "Unauthorized webhook request" });
     }
 
-    if (topic === "coupon_update") {
+    if (topic === "coupon_update" || topic === "coupon_updated" || topic === "coupon_create" || topic === "coupon_created") {
       const data = req.body;
       const code = data.value; // The unique coupon code generated
       const type = data.fiat_class; // 'percent' or 'fixed'
@@ -466,6 +466,22 @@ exports.validateCoupon = async (req, res) => {
 
     if (!coupon) {
       return res.status(400).json({ success: false, message: "Invalid or expired coupon code" });
+    }
+
+    // Verify single use per customer (applicable to logged in users, except legacy FIRST500)
+    if (req.user && req.user.id && code.toUpperCase() !== "FIRST500") {
+      const Orders = require("../models/orders/order.model");
+      const alreadyUsed = await Orders.findOne({
+        where: {
+          customerId: req.user.id,
+          couponCode: code,
+          status: { [Op.ne]: "cancelled" }
+        }
+      });
+
+      if (alreadyUsed) {
+        return res.status(400).json({ success: false, message: "You have already used this coupon code" });
+      }
     }
 
     // Verify expiry date
@@ -645,7 +661,7 @@ exports.getWebhookLogs = async (req, res) => {
     const { count, rows } = await NectorWebhookLogs.findAndCountAll({
       where: {
         event_name: {
-          [Op.in]: ['coupon_update', 'nector_webhook_received']
+          [Op.in]: ['coupon_update', 'coupon_updated', 'coupon_create', 'coupon_created', 'nector_webhook_received']
         }
       },
       order: [["created_at", "DESC"]],
