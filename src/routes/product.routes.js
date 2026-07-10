@@ -39,12 +39,12 @@ router.get("/get-accessories", ProductController.getAccessories);
 router.delete("/delete-product/:id", authenticateToken, ProductController.deleteProduct);
 router.post('/create-product', authenticateToken, upload.fields([
   { name: "thumbnailImage", maxCount: 1 },
-  { name: "galleryImage", maxCount: 10 },
+  { name: "galleryImage", maxCount: 30 },
 ]), ProductController.createProduct);
 
 router.put('/update-product', authenticateToken, upload.fields([
   { name: "thumbnailImage", maxCount: 1 },
-  { name: "galleryImage", maxCount: 10 },
+  { name: "galleryImage", maxCount: 30 },
 ]), ProductController.updateProduct);
 
 router.put("/inventory/update", authenticateToken, ProductController.updateInventory);

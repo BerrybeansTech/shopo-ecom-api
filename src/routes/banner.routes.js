@@ -9,6 +9,7 @@ router.post(
   authenticateToken,
   upload.fields([
     { name: "image", maxCount: 1 },
+    { name: "mobileImage", maxCount: 1 },
     { name: "images", maxCount: 10 },
   ]),
   bannerController.createBanner
@@ -23,6 +24,7 @@ router.put(
   authenticateToken,
   upload.fields([
     { name: "image", maxCount: 1 },
+    { name: "mobileImage", maxCount: 1 },
     { name: "images", maxCount: 1 },
   ]),
   bannerController.updateBanner

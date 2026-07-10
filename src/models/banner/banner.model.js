@@ -19,7 +19,15 @@ const Banner = sequelize.define('Banner', {
     type: DataTypes.STRING,
     allowNull: false
   },
+  mobileImage: {
+    type: DataTypes.STRING,
+    allowNull: true
+  },
   link: {
+    type: DataTypes.STRING,
+    allowNull: true
+  },
+  buttonText: {
     type: DataTypes.STRING,
     allowNull: true
   },

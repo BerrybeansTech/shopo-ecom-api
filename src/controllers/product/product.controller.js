@@ -1595,7 +1595,7 @@ const getAccessories = async (req, res) => {
 
     // Find the "Accessories" category
     const accessoryCategory = await ProductCategory.findOne({
-      where: { name: { [Op.like]: "%accessor%"} },
+      where: { name: { [Op.like]: "%accessor%" } },
     });
 
     let products = [];

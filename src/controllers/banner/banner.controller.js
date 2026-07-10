@@ -12,11 +12,58 @@ const formatBannerResponse = (banner, req) => {
   if (data.image) {
     data.image = `${baseUrl}${data.image.replace(/[\\\[\]"]/g, "").replace(/^[\\\/]+/, "")}`;
   }
+  if (data.mobileImage) {
+    data.mobileImage = `${baseUrl}${data.mobileImage.replace(/[\\\[\]"]/g, "").replace(/^[\\\/]+/, "")}`;
+  }
   return data;
 };
 
 exports.createBanner = async (req, res) => {
   try {
+    let imagePath = null;
+    let mobileImagePath = null;
+
+    if (req.files) {
+      if (req.files.image && req.files.image[0]) {
+        const file = req.files.image[0];
+        imagePath = `${(process.env.FILE_PATH || "").replace(/[\\\[\]"]/g, "")}${file.filename.replace(/[\\\[\]"]/g, "")}`;
+      }
+      if (req.files.mobileImage && req.files.mobileImage[0]) {
+        const file = req.files.mobileImage[0];
+        mobileImagePath = `${(process.env.FILE_PATH || "").replace(/[\\\[\]"]/g, "")}${file.filename.replace(/[\\\[\]"]/g, "")}`;
+      }
+    }
+
+    // Intercept single banner creation with image and/or mobileImage
+    if (req.files && (req.files.image || req.files.mobileImage)) {
+      const { title, subtitle, link, buttonText, displayOrder, isActive } = req.body;
+      const commonIsActive = isActive !== undefined ? isActive === "true" || isActive === true : true;
+
+      if (!imagePath) {
+        return res.status(400).json({
+          success: false,
+          message: "Desktop banner image is required",
+        });
+      }
+
+      const banner = await Banner.create({
+        title: title ? title.trim() : null,
+        subtitle: subtitle ? subtitle.trim() : null,
+        image: imagePath,
+        mobileImage: mobileImagePath,
+        link: link ? link.trim() : null,
+        buttonText: buttonText ? buttonText.trim() : null,
+        displayOrder: displayOrder ? parseInt(displayOrder, 10) : 1,
+        isActive: commonIsActive,
+      });
+
+      return res.status(201).json({
+        success: true,
+        message: "Banner created successfully",
+        data: formatBannerResponse(banner, req),
+      });
+    }
+
     let files = [];
     if (req.files) {
       if (req.files.images) files = [...files, ...req.files.images];
@@ -199,7 +246,7 @@ exports.getBannerById = async (req, res) => {
 exports.updateBanner = async (req, res) => {
   try {
     const { id } = req.params;
-    const { title, subtitle, link, displayOrder, isActive } = req.body;
+    const { title, subtitle, link, buttonText, displayOrder, isActive } = req.body;
 
     if (!/^\d+$/.test(id)) {
       return res.status(400).json({ success: false, message: "Invalid banner ID format" });
@@ -213,14 +260,50 @@ exports.updateBanner = async (req, res) => {
     if (title !== undefined) banner.title = title ? title.trim() : null;
     if (subtitle !== undefined) banner.subtitle = subtitle ? subtitle.trim() : null;
     if (link !== undefined) banner.link = link ? link.trim() : null;
+    if (buttonText !== undefined) banner.buttonText = buttonText ? buttonText.trim() : null;
     if (displayOrder !== undefined) banner.displayOrder = parseInt(displayOrder, 10);
     if (isActive !== undefined) banner.isActive = isActive === "true" || isActive === true;
 
-    // Handle new image upload
-    if (req.file || (req.files && (req.files.image || req.files.images))) {
-      const newFile = req.file || (req.files && (req.files.image ? req.files.image[0] : req.files.images[0]));
-      
-      // Remove old image file from filesystem
+    // Handle new image/mobileImage upload
+    if (req.files) {
+      if (req.files.image && req.files.image[0]) {
+        const newFile = req.files.image[0];
+        
+        // Remove old image file from filesystem
+        if (banner.image) {
+          const oldImagePath = path.join(__dirname, "../../../uploads", banner.image.replace(/^uploads[\/\\]/, ""));
+          if (fs.existsSync(oldImagePath)) {
+            try {
+              fs.unlinkSync(oldImagePath);
+            } catch (err) {
+              console.warn("Failed to delete old banner image:", oldImagePath);
+            }
+          }
+        }
+
+        banner.image = `${(process.env.FILE_PATH || "").replace(/[\\\[\]"]/g, "")}${newFile.filename.replace(/[\\\[\]"]/g, "")}`;
+      }
+
+      if (req.files.mobileImage && req.files.mobileImage[0]) {
+        const newFile = req.files.mobileImage[0];
+        
+        // Remove old mobile image file from filesystem
+        if (banner.mobileImage) {
+          const oldImagePath = path.join(__dirname, "../../../uploads", banner.mobileImage.replace(/^uploads[\/\\]/, ""));
+          if (fs.existsSync(oldImagePath)) {
+            try {
+              fs.unlinkSync(oldImagePath);
+            } catch (err) {
+              console.warn("Failed to delete old mobile banner image:", oldImagePath);
+            }
+          }
+        }
+
+        banner.mobileImage = `${(process.env.FILE_PATH || "").replace(/[\\\[\]"]/g, "")}${newFile.filename.replace(/[\\\[\]"]/g, "")}`;
+      }
+    } else if (req.file) {
+      // Fallback for single file upload
+      const newFile = req.file;
       if (banner.image) {
         const oldImagePath = path.join(__dirname, "../../../uploads", banner.image.replace(/^uploads[\/\\]/, ""));
         if (fs.existsSync(oldImagePath)) {
@@ -231,7 +314,6 @@ exports.updateBanner = async (req, res) => {
           }
         }
       }
-
       banner.image = `${(process.env.FILE_PATH || "").replace(/[\\\[\]"]/g, "")}${newFile.filename.replace(/[\\\[\]"]/g, "")}`;
     }
 
@@ -308,6 +390,18 @@ exports.deleteBanner = async (req, res) => {
           fs.unlinkSync(imagePath);
         } catch (err) {
           console.warn("Failed to delete banner image:", imagePath);
+        }
+      }
+    }
+
+    // Remove mobile image file from filesystem
+    if (banner.mobileImage) {
+      const mobileImagePath = path.join(__dirname, "../../../uploads", banner.mobileImage.replace(/^uploads[\/\\]/, ""));
+      if (fs.existsSync(mobileImagePath)) {
+        try {
+          fs.unlinkSync(mobileImagePath);
+        } catch (err) {
+          console.warn("Failed to delete mobile banner image:", mobileImagePath);
         }
       }
     }
