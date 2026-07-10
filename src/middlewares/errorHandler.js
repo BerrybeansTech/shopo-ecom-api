@@ -26,11 +26,20 @@ const errorHandler = (err, req, res, next) => {
   } else if (err.name === 'TokenExpiredError') {
     status = 401;
     message = 'Token expired';
+  } else if (err.name === 'MulterError') {
+    // Handle Multer file upload errors cleanly
+    status = 400;
+    if (err.code === 'LIMIT_FILE_COUNT') {
+      message = `Too many files uploaded. Maximum allowed is ${err.field ? 'exceeded for "' + err.field + '"' : 'exceeded'}.`;
+    } else if (err.code === 'LIMIT_FILE_SIZE') {
+      message = 'File too large. Please upload a smaller file.';
+    } else if (err.code === 'LIMIT_UNEXPECTED_FILE') {
+      message = `Unexpected file field: ${err.field}`;
+    } else {
+      message = err.message || 'File upload error';
+    }
   } else if (err.status) {
     status = err.status;
-    message = err.message;
-  } else if (err.code) {
-    status = err.code;
     message = err.message;
   }
 

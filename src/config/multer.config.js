@@ -16,7 +16,7 @@ const storage = multer.diskStorage({
 
 const upload = multer({
   storage,
-  limits: { files: 10 },
+  limits: { files: 31 }, // 30 gallery images + 1 thumbnail
   fileFilter: (req, file, cb) => {
     const allowedTypes = [
       'image/jpeg',
